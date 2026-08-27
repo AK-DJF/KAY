@@ -1,0 +1,2235 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kikou — Application de numérisation</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', theme: { extend: {} } }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+
+  <style>
+    body {
+      background:
+        radial-gradient(circle at top, rgba(16,27,61,.05), transparent 55%),
+        #fafaf9;
+      color:#18181b; font-family: system-ui, -apple-system, sans-serif;
+    }
+    .card { background:#ffffff; border:1px solid #e4e4e7; border-radius:12px; box-shadow:0 1px 2px rgba(24,24,27,.04); }
+    .card-hover { transition: box-shadow .15s, border-color .15s; }
+    .card-hover:hover { box-shadow:0 4px 14px rgba(24,24,27,.07); border-color:#d4d4d8; }
+    .brand-mark {
+      background: linear-gradient(155deg, #d4af37 0%, #b8912f 100%);
+      box-shadow: 0 2px 8px rgba(184,145,47,.4);
+    }
+    .app-header {
+      background: linear-gradient(180deg, #101b3d 0%, #0c1530 100%);
+      border-bottom: 2px solid #c9a227;
+    }
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:#f4f4f5; }
+    ::-webkit-scrollbar-thumb { background:#d4d4d8; border-radius:3px; }
+    input, select, textarea {
+      background:#ffffff; border:1px solid #d4d4d8; border-radius:8px;
+      color:#18181b; outline:none; transition: border-color .15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color:#c9a227; }
+    input::placeholder { color:#a1a1aa; }
+    .badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:99px; font-size:.7rem; font-weight:500; }
+    .badge-ok { background:rgba(16,185,129,.12); color:#047857; }
+    .badge-ecart { background:rgba(244,63,94,.12); color:#be123c; }
+    .badge-attente { background:rgba(113,113,122,.12); color:#52525b; }
+    .badge-info { background:rgba(71,85,105,.12); color:#334155; }
+    .tab-btn { padding:.5rem 1rem; font-size:.8rem; font-weight:500; border-radius:8px; color:rgba(255,255,255,.6); transition: all .15s; }
+    .tab-btn:hover { color:rgba(255,255,255,.9); }
+    .tab-btn.active { background:#ffffff; color:#101b3d; box-shadow:0 1px 3px rgba(0,0,0,.25); }
+    .drag-active { border-color:#c9a227 !important; background:rgba(201,162,39,.08) !important; }
+    [x-cloak] { display:none !important; }
+  </style>
+</head>
+
+<body>
+<div x-data="app()" x-init="init()" class="min-h-screen">
+
+  <!-- ─────────────────── LOGIN / SETUP GATE ─────────────────── -->
+  <template x-if="!authReady || !authentifie">
+    <div class="min-h-screen relative overflow-hidden flex items-center" style="background:#0c1530">
+      <!-- Fond texturé (dégradés + filigrane géométrique, pas de photo) -->
+      <div class="absolute inset-0" style="background:
+        radial-gradient(ellipse 900px 700px at 15% 85%, rgba(201,162,39,.10), transparent 60%),
+        radial-gradient(ellipse 800px 800px at 85% 15%, rgba(28,47,92,.9), transparent 55%),
+        linear-gradient(135deg, #0c1530 0%, #101b3d 45%, #16224a 100%);">
+      </div>
+      <svg class="absolute inset-0 w-full h-full opacity-[0.15]" viewBox="0 0 1000 1000" fill="none" preserveAspectRatio="xMidYMid slice">
+        <circle cx="880" cy="120" r="260" stroke="#c9a227" stroke-width="1"/>
+        <circle cx="880" cy="120" r="180" stroke="#c9a227" stroke-width="1"/>
+        <circle cx="880" cy="120" r="100" stroke="#c9a227" stroke-width="1"/>
+        <line x1="0" y1="500" x2="1000" y2="500" stroke="#c9a227" stroke-width=".5" opacity=".4"/>
+      </svg>
+
+      <!-- Filigrane : un tableau comptable papier qui se dissout en données numériques -->
+      <svg class="absolute inset-0 w-full h-full opacity-[0.12]" viewBox="0 0 1200 800" fill="none" preserveAspectRatio="xMidYMid slice">
+        <!-- Feuille de calcul (grille de cellules), ancrée à gauche -->
+        <g stroke="#ffffff" stroke-width="1.2">
+          <rect x="120" y="180" width="420" height="440" rx="6" fill="none" stroke="#c9a227" stroke-opacity=".6"/>
+          <line x1="120" y1="260" x2="540" y2="260"/>
+          <line x1="120" y1="340" x2="540" y2="340"/>
+          <line x1="120" y1="420" x2="540" y2="420"/>
+          <line x1="120" y1="500" x2="540" y2="500"/>
+          <line x1="120" y1="580" x2="540" y2="580"/>
+          <line x1="260" y1="180" x2="260" y2="620"/>
+          <line x1="400" y1="180" x2="400" y2="620"/>
+        </g>
+        <!-- Points/nœuds numériques se propageant vers la droite -->
+        <g fill="#c9a227">
+          <circle cx="620" cy="230" r="4"/>
+          <circle cx="690" cy="270" r="3"/>
+          <circle cx="760" cy="220" r="5"/>
+          <circle cx="650" cy="360" r="3"/>
+          <circle cx="740" cy="400" r="4"/>
+          <circle cx="830" cy="330" r="3"/>
+          <circle cx="900" cy="260" r="4"/>
+          <circle cx="680" cy="480" r="3"/>
+          <circle cx="770" cy="530" r="4"/>
+          <circle cx="860" cy="470" r="3"/>
+          <circle cx="950" cy="400" r="5"/>
+          <circle cx="1020" cy="330" r="3"/>
+          <circle cx="1060" cy="240" r="4"/>
+        </g>
+        <g stroke="#c9a227" stroke-width="1" opacity=".5">
+          <line x1="540" y1="300" x2="900" y2="260"/>
+          <line x1="540" y1="420" x2="950" y2="400"/>
+          <line x1="540" y1="540" x2="860" y2="470"/>
+        </g>
+        <!-- Code binaire flottant côté numérique -->
+        <g fill="#ffffff" font-family="ui-monospace, monospace" font-size="16" opacity=".7">
+          <text x="640" y="180">01001</text>
+          <text x="800" y="150">1010</text>
+          <text x="920" y="200">0110</text>
+          <text x="1000" y="290">101</text>
+          <text x="960" y="560">0011</text>
+          <text x="820" y="610">1100</text>
+          <text x="700" y="640">01</text>
+        </g>
+      </svg>
+      <div class="absolute inset-0" style="background:linear-gradient(0deg, rgba(0,0,0,.35) 0%, transparent 45%);"></div>
+
+      <!-- Bandeau de marque -->
+      <div class="absolute top-0 left-0 p-6 sm:p-8 flex items-center gap-2.5 z-10">
+        <div class="w-9 h-9 rounded-xl brand-mark flex items-center justify-center font-bold text-white">K</div>
+        <div>
+          <span class="font-semibold text-white block leading-none">Numérisation</span>
+          <span class="text-[10px] text-white/50 uppercase tracking-widest">Espace comptable</span>
+        </div>
+      </div>
+
+      <!-- Accroche -->
+      <div class="absolute bottom-0 left-0 p-6 sm:p-10 max-w-lg z-10">
+        <p class="text-white text-2xl sm:text-3xl font-bold leading-tight">Vos relevés et factures,<br>traités en quelques secondes.</p>
+        <p class="text-white/60 text-sm mt-4">Extraction automatique, contrôle des soldes et export FEC — sans ressaisie manuelle, pour vous concentrer sur le conseil à vos clients.</p>
+      </div>
+
+      <!-- Carte flottante -->
+      <div class="relative z-10 mx-auto w-full max-w-sm px-4">
+        <template x-if="authReady">
+        <div class="card p-8 rounded-2xl shadow-2xl border-zinc-100">
+          <h2 class="font-semibold text-zinc-900 text-lg mb-1" x-text="setupRequis ? 'Créer le compte administrateur' : 'Connexion'"></h2>
+          <p class="text-xs text-zinc-500 mb-6" x-text="setupRequis ? 'Premier lancement — définissez vos identifiants.' : 'Accédez à votre espace.'"></p>
+
+          <form @submit.prevent="setupRequis ? doSetup() : doLogin()" class="space-y-4">
+            <div>
+              <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Email</label>
+              <input type="email" x-model="loginForm.email" required class="w-full mt-1 px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Mot de passe</label>
+              <input type="password" x-model="loginForm.mot_de_passe" required minlength="8" class="w-full mt-1 px-3 py-2 text-sm">
+            </div>
+            <p x-show="authError" class="text-xs text-rose-600" x-text="authError"></p>
+            <button type="submit" class="w-full py-2.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+              <span x-text="setupRequis ? 'Créer le compte' : 'Se connecter'"></span>
+            </button>
+          </form>
+        </div>
+        </template>
+      </div>
+    </div>
+  </template>
+
+  <!-- ─────────────────── MAIN APP ─────────────────── -->
+  <template x-if="authReady && authentifie">
+  <div>
+    <!-- Header -->
+    <header class="sticky top-0 z-40 app-header">
+      <div class="max-w-7xl mx-auto px-4 h-14 flex items-center gap-4">
+        <div class="flex items-center gap-2.5 flex-shrink-0">
+          <div class="w-7 h-7 rounded-lg brand-mark flex items-center justify-center font-bold text-white text-xs">K</div>
+          <span class="font-semibold text-white text-sm">Numérisation</span>
+        </div>
+
+        <nav class="flex items-center gap-1">
+          <button class="tab-btn" :class="vue==='dashboard' ? 'active' : ''" @click="vue='dashboard'; chargerDashboard()">Tableau de bord</button>
+          <button class="tab-btn" :class="vue==='societes' ? 'active' : ''"
+                  @click="vue='societes'; if(societeSelectionnee){ chargerComptes(societeSelectionnee); tiersRecherche=''; chargerTiers(); chargerTiersSociete(societeSelectionnee); chargerComptesRecurrents(societeSelectionnee); chargerComptesCollectifs(societeSelectionnee); chargerTauxTva(societeSelectionnee) }">Sociétés & comptes</button>
+          <button class="tab-btn" :class="vue==='releves' ? 'active' : ''" @click="vue='releves'">Relevés</button>
+          <button class="tab-btn" :class="vue==='factures' ? 'active' : ''"
+                  @click="vue='factures'; if(societeSelectionnee){ chargerFactures(); chargerFacturesTraitees(); chargerTiersSociete(societeSelectionnee); chargerComptesRecurrents(societeSelectionnee); chargerComptesCollectifs(societeSelectionnee); chargerTauxTva(societeSelectionnee) }">Factures</button>
+          <button class="tab-btn" :class="vue==='anomalies' ? 'active' : ''" @click="vue='anomalies'; chargerAnomalies()">
+            Anomalies
+            <span x-show="dashboard?.alertes?.anomalies_ouvertes > 0"
+                  class="ml-1 badge badge-ecart" x-text="dashboard?.alertes?.anomalies_ouvertes"></span>
+          </button>
+          <button class="tab-btn" :class="vue==='parametres' ? 'active' : ''" @click="vue='parametres'">Paramètres</button>
+        </nav>
+
+        <div class="flex-1"></div>
+        <span class="text-xs text-white/60 hidden sm:block" x-text="user?.email"></span>
+        <button @click="logout()" class="text-xs text-white/60 hover:text-white transition-colors">Déconnexion</button>
+      </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 space-y-5">
+
+      <!-- ─── DASHBOARD ─── -->
+      <template x-if="vue === 'dashboard'">
+        <div class="space-y-5">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="card p-5">
+              <p class="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Relevés en écart</p>
+              <p class="text-2xl font-bold" :class="dashboard?.alertes?.releves_en_ecart ? 'text-rose-600' : 'text-emerald-600'"
+                 x-text="dashboard?.alertes?.releves_en_ecart ?? 0"></p>
+            </div>
+            <div class="card p-5">
+              <p class="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Anomalies ouvertes</p>
+              <p class="text-2xl font-bold" :class="dashboard?.alertes?.anomalies_ouvertes ? 'text-amber-600' : 'text-emerald-600'"
+                 x-text="dashboard?.alertes?.anomalies_ouvertes ?? 0"></p>
+            </div>
+            <div class="card p-5">
+              <p class="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Factures à corriger</p>
+              <p class="text-2xl font-bold text-zinc-700" x-text="dashboard?.alertes?.factures_a_corriger ?? 0"></p>
+            </div>
+          </div>
+
+          <template x-if="!dashboard || dashboard.societes.length === 0">
+            <div class="card p-16 text-center border-dashed border-2 border-zinc-200">
+              <p class="text-zinc-600 font-medium">Aucune société créée</p>
+              <p class="text-zinc-400 text-sm mt-1">Commencez par créer une société dans l'onglet « Sociétés & comptes ».</p>
+            </div>
+          </template>
+
+          <template x-for="s in (dashboard?.societes || [])" :key="s.id">
+            <div class="card p-5">
+              <p class="font-semibold text-zinc-900 mb-3" x-text="s.nom"></p>
+              <template x-if="s.comptes.length === 0">
+                <p class="text-xs text-zinc-400">Aucun compte bancaire pour cette société.</p>
+              </template>
+              <div class="space-y-2">
+                <template x-for="c in s.comptes" :key="c.id">
+                  <div class="flex items-center justify-between bg-zinc-100/70 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-zinc-100/70"
+                       @click="vue='releves'; selectionnerCompte(s.id, c.id)">
+                    <div>
+                      <p class="text-sm text-zinc-800" x-text="`${c.libelle} · ${c.banque}`"></p>
+                      <p class="text-[11px] text-zinc-400" x-text="`${c.nb_releves} relevé(s) importé(s)${c.dernier_releve ? ' · dernier : ' + c.dernier_releve.mois + '/' + c.dernier_releve.annee : ''}`"></p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span x-show="c.nb_ecarts > 0" class="badge badge-ecart" x-text="`${c.nb_ecarts} écart(s)`"></span>
+                      <span x-show="c.nb_ecarts === 0 && c.nb_releves > 0" class="badge badge-ok">OK</span>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ─── SOCIÉTÉS & COMPTES ─── -->
+      <template x-if="vue === 'societes'">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div class="card p-5">
+            <p class="font-semibold text-zinc-900 mb-3 text-sm">Sociétés</p>
+            <form @submit.prevent="creerSociete()" class="flex gap-2 mb-4">
+              <input type="text" x-model="nouvelleSociete" placeholder="Nom de la société" class="flex-1 px-3 py-1.5 text-sm">
+              <button class="px-3 py-1.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-xs font-medium rounded-lg">+</button>
+            </form>
+            <div class="space-y-1">
+              <template x-for="s in societes" :key="s.id">
+                <div class="flex items-center gap-1 group">
+                  <button @click="societeSelectionnee = s.id; chargerComptes(s.id); tiersRecherche=''; chargerTiers(); chargerTiersSociete(s.id); chargerComptesRecurrents(s.id); chargerComptesCollectifs(s.id); chargerTauxTva(s.id); journauxForm = { journal_achats: s.journal_achats, journal_ventes: s.journal_ventes }; journauxMsg=''"
+                          class="flex-1 text-left px-3 py-2 rounded-lg text-sm transition-colors"
+                          :class="societeSelectionnee === s.id ? 'bg-[#eef1f6] text-[#0a1428]' : 'text-zinc-600 hover:bg-zinc-100/60'">
+                    <span x-text="s.nom"></span>
+                    <span class="text-[11px] text-zinc-400 ml-1" x-text="`(${s.nb_comptes})`"></span>
+                  </button>
+                  <button @click.stop="supprimerSociete(s.id, s.nom)"
+                          class="flex-shrink-0 px-2 py-2 text-zinc-300 hover:text-rose-600 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Supprimer la société">×</button>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="card p-5 lg:col-span-2">
+            <template x-if="!societeSelectionnee">
+              <p class="text-sm text-zinc-400">Sélectionnez une société pour gérer ses comptes bancaires.</p>
+            </template>
+            <template x-if="societeSelectionnee">
+              <div>
+                <!-- Statut de validation de la société -->
+                <div class="flex items-center justify-between mb-4 pb-4 border-b border-zinc-200">
+                  <div>
+                    <p class="font-semibold text-zinc-900 text-sm" x-text="societes.find(s => s.id === societeSelectionnee)?.nom"></p>
+                    <span class="badge mt-1" :class="societes.find(s => s.id === societeSelectionnee)?.validee ? 'badge-ok' : 'badge-attente'"
+                          x-text="societes.find(s => s.id === societeSelectionnee)?.validee ? '✓ Société validée' : 'Société non validée'"></span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button @click="validerSociete()" x-show="!societes.find(s => s.id === societeSelectionnee)?.validee"
+                            class="px-3 py-1.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-xs font-medium rounded-lg">Valider la société</button>
+                    <button @click="vue='dashboard'; chargerDashboard()"
+                            class="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg">
+                      Terminer le paramétrage
+                    </button>
+                  </div>
+                </div>
+
+                <p class="font-semibold text-zinc-900 mb-3 text-sm">Comptes bancaires</p>
+                <form @submit.prevent="creerCompte()" class="grid grid-cols-2 gap-2 mb-4">
+                  <select x-model="nouveauCompte.banque" class="px-3 py-1.5 text-sm">
+                    <option value="Qonto">Qonto</option>
+                    <option value="Revolut">Revolut</option>
+                    <option value="Société Générale">Société Générale</option>
+                    <option value="BRED">BRED</option>
+                    <option value="Autre">Autre banque</option>
+                  </select>
+                  <input type="text" x-model="nouveauCompte.libelle" placeholder="Libellé (ex. Compte principal)" class="px-3 py-1.5 text-sm">
+                  <select x-model="nouveauCompte.devise" class="px-3 py-1.5 text-sm">
+                    <option value="EUR">EUR</option>
+                    <option value="MAD">MAD</option>
+                  </select>
+                  <select x-model.number="nouveauCompte.mois_debut_exercice" class="px-3 py-1.5 text-sm">
+                    <template x-for="m in 12" :key="m">
+                      <option :value="m" x-text="nomMois(m) + ' (début exercice)'"></option>
+                    </template>
+                  </select>
+                  <input type="text" x-model="nouveauCompte.numero_compte_bancaire" placeholder="N° compte bancaire" class="px-3 py-1.5 text-sm">
+                  <input type="text" x-model="nouveauCompte.numero_compte_comptable" placeholder="N° compte comptable (ex. 51220000)" class="px-3 py-1.5 text-sm">
+                  <!-- Aperçu du libellé déjà saisi ci-dessus, en confirmation avant validation (évolution 2026-08-21, demande Anis) -->
+                  <p class="px-3 py-1.5 text-sm bg-zinc-100/70 rounded-lg text-zinc-600 truncate">
+                    Libellé : <span class="text-zinc-900 font-medium" x-text="nouveauCompte.libelle || '—'"></span>
+                  </p>
+                  <input type="text" x-model="nouveauCompte.journal_comptable" placeholder="Journal comptable (ex. BQ1)" class="px-3 py-1.5 text-sm">
+                  <input type="text" x-model="nouveauCompte.derniers_chiffres" maxlength="4" placeholder="4 derniers chiffres (optionnel)" class="px-3 py-1.5 text-sm">
+                  <button class="col-span-2 py-1.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-xs font-medium rounded-lg">Ajouter le compte</button>
+                </form>
+
+                <div class="space-y-1.5 mb-6">
+                  <template x-for="c in comptes" :key="c.id">
+                    <div class="bg-zinc-100/70 rounded-lg px-3 py-2.5"
+                         x-data="{ edition:false, form:{} }">
+                      <template x-if="!edition">
+                        <div class="flex items-center justify-between">
+                          <div>
+                            <p class="text-sm text-zinc-800" x-text="`${c.libelle} · ${c.banque} · ${c.devise}${c.derniers_chiffres ? ' · ****' + c.derniers_chiffres : ''}`"></p>
+                            <p class="text-[11px] text-zinc-400" x-text="`Exercice à partir de ${nomMois(c.mois_debut_exercice)} · ${c.nb_releves} relevé(s)${c.numero_compte_comptable ? ' · compte ' + c.numero_compte_comptable : ''}${c.journal_comptable ? ' · journal ' + c.journal_comptable : ''}`"></p>
+                            <p x-show="!c.numero_compte_comptable || !c.journal_comptable" class="text-[11px] text-amber-600 mt-0.5">⚠ Compte comptable / journal manquant — requis pour l'export FEC.</p>
+                          </div>
+                          <div class="flex items-center gap-2 flex-shrink-0">
+                            <button @click="form = { banque:c.banque, libelle:c.libelle, devise:c.devise, mois_debut_exercice:c.mois_debut_exercice, numero_compte_bancaire:c.numero_compte_bancaire, numero_compte_comptable:c.numero_compte_comptable, derniers_chiffres:c.derniers_chiffres, journal_comptable:c.journal_comptable }; edition=true"
+                                    class="text-[11px] text-[#101b3d] hover:text-[#0a1428]">Modifier</button>
+                            <button @click="supprimerCompte(c.id)" class="text-zinc-300 hover:text-rose-600 text-xs">Supprimer</button>
+                          </div>
+                        </div>
+                      </template>
+                      <template x-if="edition">
+                        <form @submit.prevent="modifierCompte(c.id, form).then(ok => { if (ok) edition=false })" class="grid grid-cols-2 gap-2">
+                          <select x-model="form.banque" class="px-3 py-1.5 text-sm">
+                            <option value="Qonto">Qonto</option>
+                            <option value="Revolut">Revolut</option>
+                            <option value="Société Générale">Société Générale</option>
+                            <option value="BRED">BRED</option>
+                            <option value="Autre">Autre banque</option>
+                          </select>
+                          <input type="text" x-model="form.libelle" placeholder="Libellé" class="px-3 py-1.5 text-sm">
+                          <select x-model="form.devise" class="px-3 py-1.5 text-sm">
+                            <option value="EUR">EUR</option>
+                            <option value="MAD">MAD</option>
+                          </select>
+                          <select x-model.number="form.mois_debut_exercice" class="px-3 py-1.5 text-sm">
+                            <template x-for="m in 12" :key="m">
+                              <option :value="m" x-text="nomMois(m) + ' (début exercice)'"></option>
+                            </template>
+                          </select>
+                          <input type="text" x-model="form.numero_compte_bancaire" placeholder="N° compte bancaire" class="px-3 py-1.5 text-sm">
+                          <input type="text" x-model="form.numero_compte_comptable" placeholder="N° compte comptable" class="px-3 py-1.5 text-sm">
+                          <input type="text" x-model="form.journal_comptable" placeholder="Journal comptable" class="px-3 py-1.5 text-sm">
+                          <input type="text" x-model="form.derniers_chiffres" maxlength="4" placeholder="4 derniers chiffres (optionnel)" class="px-3 py-1.5 text-sm">
+                          <div class="col-span-2 flex items-center gap-2">
+                            <button type="submit" class="flex-1 py-1.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-xs font-medium rounded-lg">Sauvegarder</button>
+                            <button type="button" @click="edition=false" class="px-3 py-1.5 text-xs text-zinc-500 hover:bg-zinc-200 rounded-lg">Annuler</button>
+                          </div>
+                          <p x-show="modifierCompteErreur" class="col-span-2 text-xs text-rose-600" x-text="modifierCompteErreur"></p>
+                        </form>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+
+                <!-- Comptes tiers (clients/fournisseurs) -->
+                <div class="border-t border-zinc-200 pt-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <p class="font-semibold text-zinc-900 text-sm">Comptes tiers (clients / fournisseurs / personnel)</p>
+                    <label class="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-medium rounded-lg cursor-pointer">
+                      Importer Excel
+                      <input type="file" accept=".xlsx,.xls" class="hidden" @change="importerTiers($event)">
+                    </label>
+                  </div>
+
+                  <!-- Création manuelle d'un compte tiers ou général, via la modale partagée -->
+                  <button type="button" @click="ouvrirCreationCompte(null, () => chargerTiers())"
+                          class="w-full py-2 mb-3 bg-zinc-50 border border-dashed border-zinc-300 hover:border-[#101b3d] hover:bg-[#eef1f6] text-zinc-600 hover:text-[#101b3d] text-xs font-medium rounded-lg transition-colors">
+                    + Créer un compte tiers ou général
+                  </button>
+
+                  <p class="text-[11px] text-zinc-400 mb-2">Import en masse — fichier à 3 colonnes : numéro de compte, intitulé, type (client / fournisseur / salarié / compte). « Compte » = compte comptable ordinaire (charges, produits…), non lié à un tiers ; le compte de TVA associé se choisit ligne par ligne sur chaque mouvement, pas ici.</p>
+                  <p x-show="tiersImportMsg" class="text-xs mb-2" :class="tiersImportErreur ? 'text-rose-600' : 'text-emerald-600'" x-text="tiersImportMsg"></p>
+                  <input type="text" x-model="tiersRecherche" @input="chargerTiers()" placeholder="Rechercher un tiers (3-4 lettres)…" class="w-full px-3 py-1.5 text-sm mb-2">
+                  <div class="max-h-48 overflow-y-auto space-y-1">
+                    <template x-for="t in tiers" :key="t.id">
+                      <div class="flex items-center justify-between bg-zinc-100/70 rounded-lg px-3 py-2 text-xs">
+                        <span class="text-zinc-700" x-text="`${t.numero_compte} — ${t.intitule}`"></span>
+                        <span class="badge" :class="t.type === 'client' ? 'badge-info' : (t.type === 'salarie' ? 'badge-ok' : (t.type === 'compte' ? 'badge-ecart' : 'badge-attente'))" x-text="t.type"></span>
+                      </div>
+                    </template>
+                    <p x-show="tiers.length === 0" class="text-xs text-zinc-400 py-2 text-center">Aucun tiers importé pour cette société.</p>
+                  </div>
+                </div>
+
+                <!-- Journaux (module Factures achats/ventes, évolution 2026-08-16 — regroupé ici -->
+                <!-- avec le reste des réglages de la société, l'onglet Paramètres est abandonné) -->
+                <div class="border-t border-zinc-200 pt-4 mt-4">
+                  <p class="font-semibold text-zinc-900 text-sm mb-1">Journaux</p>
+                  <p class="text-[11px] text-zinc-400 mb-3">
+                    Journal achats et journal ventes, utilisés pour l'export FEC des factures. Le
+                    journal bancaire se règle par compte (champ « Journal comptable » ci-dessus, dans
+                    « Comptes bancaires »).
+                  </p>
+                  <form @submit.prevent="sauvegarderJournaux()" class="grid grid-cols-2 gap-2 mb-2">
+                    <input type="text" x-model="journauxForm.journal_achats" placeholder="Journal achats (ex. ACH)" class="px-3 py-1.5 text-sm">
+                    <input type="text" x-model="journauxForm.journal_ventes" placeholder="Journal ventes (ex. VTE)" class="px-3 py-1.5 text-sm">
+                    <button class="col-span-2 py-1.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-xs font-medium rounded-lg">Enregistrer les journaux</button>
+                  </form>
+                  <p x-show="journauxMsg" class="text-xs" :class="journauxErreur ? 'text-rose-600' : 'text-emerald-600'" x-text="journauxMsg"></p>
+                </div>
+
+                <!-- Compte d'attente (repli automatique), propre à cette société -->
+                <div class="border-t border-zinc-200 pt-4 mt-4">
+                  <p class="font-semibold text-zinc-900 text-sm mb-1">Compte d'attente (repli automatique)</p>
+                  <p class="text-[11px] text-zinc-400 mb-3">
+                    Utilisé automatiquement comme contrepartie à l'export FEC quand une ligne de relevé
+                    ou une facture n'est rattachée à aucun tiers ni compte comptable. Un seul compte
+                    peut être marqué « par défaut » pour cette société.
+                  </p>
+                  <form @submit.prevent="creerCompteRecurrent()" class="space-y-2 mb-2">
+                    <!-- N° de compte : puisé dans le plan comptable (comptes type "compte") de cette
+                         société, même picker que "Compte comptable" des factures/mouvements — avec
+                         création à la volée si le compte n'existe pas encore (évolution 2026-08-17,
+                         demande Anis : ne plus retaper un numéro/intitulé à la main). -->
+                    <div class="relative" x-data="{ open:false, q:'' }">
+                      <button type="button" @click="open = !open"
+                              class="w-full text-left px-3 py-1.5 text-sm rounded-lg"
+                              :class="nouveauCompteRecurrent.numero_compte ? 'text-zinc-800 bg-zinc-100/70 border border-zinc-200' : 'text-zinc-400 bg-zinc-100/50 border border-dashed border-zinc-200'"
+                              x-text="nouveauCompteRecurrent.numero_compte ? `${nouveauCompteRecurrent.numero_compte} — ${nouveauCompteRecurrent.intitule}` : '— Choisir un compte du plan comptable —'"></button>
+                      <div x-show="open" @click.outside="open=false" x-cloak
+                           class="absolute z-10 left-0 right-0 mt-1 bg-white border border-zinc-300 rounded-lg p-1.5 shadow-xl">
+                        <input type="text" x-model.debounce.150ms="q" @click.stop placeholder="Rechercher (code ou nom)…" class="w-full px-2 py-1 text-xs mb-1">
+                        <div class="max-h-56 overflow-y-auto">
+                          <template x-for="t in optionsComptesFacture(q)" :key="t.id">
+                            <button type="button" @click="nouveauCompteRecurrent.numero_compte = t.numero_compte; nouveauCompteRecurrent.intitule = t.intitule; open=false"
+                                    class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-700"
+                                    x-text="`${t.numero_compte} — ${t.intitule}`"></button>
+                          </template>
+                          <p x-show="optionsComptesFacture(q).length === 0 && q.trim().length >= 3" class="text-[10px] text-zinc-300 px-2 py-1">Aucun compte.</p>
+                          <p x-show="q.trim().length < 3" class="text-[10px] text-zinc-300 px-2 py-1">Tapez au moins 3 caractères</p>
+                        </div>
+                        <button type="button"
+                                @click="open=false; ouvrirCreationCompte(['compte'], (id) => { const t = tiersSociete.find(x => x.id === id); nouveauCompteRecurrent.numero_compte = t.numero_compte; nouveauCompteRecurrent.intitule = t.intitule })"
+                                class="w-full text-left px-2 py-1.5 mt-1 text-xs rounded text-[#101b3d] hover:bg-[#eef1f6] border-t border-zinc-100 pt-1.5">
+                          + Créer un nouveau compte
+                        </button>
+                      </div>
+                    </div>
+                    <label class="flex items-center gap-2 text-xs text-zinc-600">
+                      <input type="checkbox" x-model="nouveauCompteRecurrent.est_defaut">
+                      Définir comme compte par défaut (repli automatique)
+                    </label>
+                    <button class="w-full py-1.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-xs font-medium rounded-lg">Ajouter comme compte d'attente</button>
+                  </form>
+                  <p x-show="comptesRecurrentsMsg" class="text-xs mb-2" :class="comptesRecurrentsErreur ? 'text-rose-600' : 'text-emerald-600'" x-text="comptesRecurrentsMsg"></p>
+                  <div class="space-y-1.5">
+                    <template x-for="c in comptesRecurrents" :key="c.id">
+                      <div class="flex items-center justify-between bg-zinc-100/70 rounded-lg px-3 py-2.5">
+                        <div>
+                          <p class="text-sm text-zinc-800" x-text="`${c.numero_compte} — ${c.intitule}`"></p>
+                          <span x-show="c.est_defaut" class="badge badge-ok mt-1">Par défaut</span>
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                          <button x-show="!c.est_defaut" @click="definirCompteRecurrentDefaut(c.id)" class="text-[11px] text-[#101b3d] hover:text-[#0a1428]">Définir par défaut</button>
+                          <button @click="supprimerCompteRecurrent(c.id)" class="text-zinc-300 hover:text-rose-600 text-xs">Supprimer</button>
+                        </div>
+                      </div>
+                    </template>
+                    <p x-show="comptesRecurrents.length === 0" class="text-xs text-zinc-400 py-2 text-center">Aucun compte d'attente configuré pour cette société.</p>
+                  </div>
+                </div>
+
+                <!-- Comptes collectifs (401 Fournisseurs, 411 Clients, 420 Personnel...), propres à cette société -->
+                <div class="border-t border-zinc-200 pt-4 mt-4">
+                  <p class="font-semibold text-zinc-900 text-sm mb-1">Comptes collectifs</p>
+                  <p class="text-[11px] text-zinc-400 mb-3">
+                    Comptes du plan comptable (ex. 401 Fournisseurs, 411 Clients, 420 Personnel) auxquels
+                    rattacher chaque nouveau compte tiers créé — simple classification, sans contrainte
+                    de préfixe numérique entre le collectif et le compte rattaché.
+                  </p>
+                  <form @submit.prevent="creerCompteCollectif()" class="grid grid-cols-2 gap-2 mb-2">
+                    <input type="text" x-model="nouveauCompteCollectif.numero_compte" placeholder="N° (ex. 401)" class="px-3 py-1.5 text-sm">
+                    <input type="text" x-model="nouveauCompteCollectif.intitule" placeholder="Intitulé (ex. Fournisseurs)" class="px-3 py-1.5 text-sm">
+                    <button class="col-span-2 py-1.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-xs font-medium rounded-lg">Ajouter le compte collectif</button>
+                  </form>
+                  <p x-show="comptesCollectifsMsg" class="text-xs mb-2" :class="comptesCollectifsErreur ? 'text-rose-600' : 'text-emerald-600'" x-text="comptesCollectifsMsg"></p>
+                  <div class="space-y-1.5">
+                    <template x-for="c in comptesCollectifs" :key="c.id">
+                      <div class="flex items-center justify-between bg-zinc-100/70 rounded-lg px-3 py-2.5">
+                        <p class="text-sm text-zinc-800" x-text="`${c.numero_compte} — ${c.intitule}`"></p>
+                        <button @click="supprimerCompteCollectif(c.id)" class="text-zinc-300 hover:text-rose-600 text-xs flex-shrink-0">Supprimer</button>
+                      </div>
+                    </template>
+                    <p x-show="comptesCollectifs.length === 0" class="text-xs text-zinc-400 py-2 text-center">Aucun compte collectif configuré pour cette société.</p>
+                  </div>
+                </div>
+
+                <!-- Taux de TVA, propres à cette société -->
+                <div class="border-t border-zinc-200 pt-4 mt-4">
+                  <p class="font-semibold text-zinc-900 text-sm mb-1">Taux de TVA</p>
+                  <p class="text-[11px] text-zinc-400 mb-3">
+                    Utilisés pour scinder automatiquement un mouvement ou une facture rattaché à un
+                    compte comptable (charge/produit) entre part HT et TVA à l'export FEC.
+                  </p>
+                  <form @submit.prevent="creerTauxTVA()" class="grid grid-cols-3 gap-2 mb-2">
+                    <input type="number" step="0.1" x-model.number="nouveauTauxTVA.taux" placeholder="Taux % (ex. 20)" class="px-3 py-1.5 text-sm">
+                    <!-- N° compte TVA : puisé dans la liste des comptes comptables (type "compte") de
+                         cette société, restreint aux comptes de TVA (préfixe 445, plan comptable
+                         français — évolution du 2026-08-17, demande Anis : ne plus mélanger avec les
+                         comptes de charges/produits ordinaires dans ce sélecteur précis). -->
+                    <div class="relative" x-data="{ open:false, q:'' }">
+                      <button type="button" @click="open = !open"
+                              class="w-full text-left px-3 py-1.5 text-sm rounded-lg"
+                              :class="nouveauTauxTVA.numero_compte_tva ? 'text-zinc-800 bg-zinc-100/70 border border-zinc-200' : 'text-zinc-400 bg-zinc-100/50 border border-dashed border-zinc-200'"
+                              x-text="nouveauTauxTVA.numero_compte_tva || '— N° compte TVA —'"></button>
+                      <div x-show="open" @click.outside="open=false" x-cloak
+                           class="absolute z-10 left-0 right-0 mt-1 bg-white border border-zinc-300 rounded-lg p-1.5 shadow-xl">
+                        <input type="text" x-model.debounce.150ms="q" @click.stop placeholder="Rechercher (code ou nom)…" class="w-full px-2 py-1 text-xs mb-1">
+                        <div class="max-h-56 overflow-y-auto">
+                          <template x-for="t in optionsComptesTva(q)" :key="t.id">
+                            <button type="button" @click="nouveauTauxTVA.numero_compte_tva = t.numero_compte; nouveauTauxTVA.intitule = t.intitule; open=false"
+                                    class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-700"
+                                    x-text="`${t.numero_compte} — ${t.intitule}`"></button>
+                          </template>
+                          <p x-show="optionsComptesTva(q).length === 0 && q.trim().length >= 3" class="text-[10px] text-zinc-300 px-2 py-1">Aucun compte 445xxx dans le plan comptable — importez la liste de tiers (comptes tiers ci-dessus) avec un compte de TVA inclus.</p>
+                          <p x-show="q.trim().length < 3" class="text-[10px] text-zinc-300 px-2 py-1">Tapez au moins 3 caractères</p>
+                        </div>
+                      </div>
+                    </div>
+                    <input type="text" x-model="nouveauTauxTVA.intitule" placeholder="Intitulé" class="px-3 py-1.5 text-sm">
+                    <button class="col-span-3 py-1.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-xs font-medium rounded-lg">Ajouter le taux</button>
+                  </form>
+                  <p x-show="tauxTvaMsg" class="text-xs mb-3" :class="tauxTvaErreur ? 'text-rose-600' : 'text-emerald-600'" x-text="tauxTvaMsg"></p>
+                  <div class="space-y-1.5">
+                    <template x-for="t in tauxTva" :key="t.id">
+                      <div class="flex items-center justify-between bg-zinc-100/70 rounded-lg px-3 py-2.5">
+                        <p class="text-sm text-zinc-800" x-text="`${fmtTaux(t.taux)} — ${t.numero_compte_tva || '⚠ compte manquant'} · ${t.intitule}`"
+                           :class="!t.numero_compte_tva ? 'text-amber-600' : ''"></p>
+                        <button @click="supprimerTauxTVA(t.id)" class="text-zinc-300 hover:text-rose-600 text-xs flex-shrink-0">Supprimer</button>
+                      </div>
+                    </template>
+                    <p x-show="tauxTva.length === 0" class="text-xs text-zinc-400 py-2 text-center">Aucun taux de TVA configuré pour cette société.</p>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ─── PARAMÈTRES ─── -->
+      <!-- Vidé le 2026-08-16 (demande Anis) : compte d'attente, taux de TVA et journaux sont
+           désormais propres à chaque société et gérés depuis l'onglet "Sociétés & comptes" — tout
+           ce qui concerne une société est regroupé au même endroit. Onglet conservé (pas supprimé)
+           au cas où un réglage vraiment global (toutes sociétés) soit nécessaire plus tard. -->
+      <template x-if="vue === 'parametres'">
+        <div class="card p-16 text-center border-dashed border-2 border-zinc-200">
+          <p class="text-zinc-500 text-sm">Rien ici pour l'instant.</p>
+          <p class="text-zinc-400 text-xs mt-1">Comptes d'attente, taux de TVA et journaux se gèrent maintenant par société, dans l'onglet « Sociétés & comptes ».</p>
+        </div>
+      </template>
+
+      <!-- ─── RELEVÉS ─── -->
+      <template x-if="vue === 'releves'">
+        <div class="space-y-5">
+          <div class="card p-4 flex flex-wrap gap-3 items-center">
+            <select x-model.number="societeSelectionnee" @change="chargerComptes(societeSelectionnee); compteSelectionne=null" class="px-3 py-1.5 text-sm">
+              <option :value="null">— Choisir une société —</option>
+              <template x-for="s in societes" :key="s.id"><option :value="s.id" x-text="s.nom"></option></template>
+            </select>
+            <select x-model.number="compteSelectionne" @change="selectionnerCompte(societeSelectionnee, compteSelectionne)" class="px-3 py-1.5 text-sm">
+              <option :value="null">— Choisir un compte —</option>
+              <template x-for="c in comptes" :key="c.id"><option :value="c.id" x-text="`${c.libelle} (${c.banque})`"></option></template>
+            </select>
+            <div class="flex-1"></div>
+            <button x-show="compteSelectionne" @click="showUploadModal = true; prepareUpload()"
+                    class="px-3.5 py-1.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-xs font-medium rounded-lg">
+              Importer un relevé
+            </button>
+            <button x-show="compteSelectionne" @click="exporterConsolide()"
+                    class="px-3.5 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-medium rounded-lg">
+              Export consolidé exercice
+            </button>
+            <button x-show="compteSelectionne" @click="exporterFecExercice()"
+                    class="px-3.5 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-medium rounded-lg">
+              FEC exercice
+            </button>
+            <button x-show="compteSelectionne" @click="supprimerCompteDepuisReleves()"
+                    class="px-3.5 py-1.5 bg-zinc-100 hover:bg-rose-100 text-zinc-600 hover:text-rose-700 text-xs font-medium rounded-lg">
+              Supprimer le compte
+            </button>
+          </div>
+
+          <!-- Suivi visuel mois par mois -->
+          <template x-if="compteSelectionne">
+            <div class="card p-4">
+              <p class="text-xs text-zinc-500 uppercase tracking-widest mb-3">Suivi de l'exercice — mois numérisés</p>
+              <div class="grid grid-cols-6 sm:grid-cols-12 gap-1.5">
+                <template x-for="mc in moisExercice" :key="mc.mois + '-' + mc.annee">
+                  <div class="relative group">
+                    <button @click="mc.releve && selectionnerReleve(mc.releve.id)"
+                            class="w-full rounded-lg p-2 text-center transition-colors"
+                            :class="{
+                              'bg-emerald-50 hover:bg-emerald-100 cursor-pointer': mc.releve && mc.releve.statut === 'ok',
+                              'bg-rose-50 hover:bg-rose-100 cursor-pointer': mc.releve && mc.releve.statut === 'ecart',
+                              'bg-zinc-100/70 hover:bg-zinc-100/70 cursor-pointer': mc.releve && mc.releve.statut === 'en_attente',
+                              'bg-zinc-100/40 opacity-50': !mc.releve,
+                            }"
+                            :title="mc.releve ? `Solde début ${fmt(mc.releve.solde_initial)} — fin ${fmt(mc.releve.solde_final_calcule)}` : 'Mois non numérisé'">
+                      <p class="text-[10px] uppercase text-zinc-600" x-text="nomMois(mc.mois).slice(0,3)"></p>
+                      <p class="text-[9px] text-zinc-400" x-text="mc.annee"></p>
+                      <p class="text-[9px] mt-0.5" :class="mc.releve ? (mc.releve.statut === 'ecart' ? 'text-rose-600' : 'text-emerald-600') : 'text-zinc-300'"
+                         x-text="mc.releve ? '●' : '○'"></p>
+                    </button>
+                    <button x-show="mc.releve" @click.stop="supprimerReleveDepuisGrille(mc.releve.id, mc.mois, mc.annee)"
+                            class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-zinc-100 hover:bg-rose-700 text-zinc-600 hover:text-white text-[10px] leading-none opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                            title="Supprimer ce relevé">×</button>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="!compteSelectionne">
+            <div class="card p-16 text-center border-dashed border-2 border-zinc-200">
+              <p class="text-zinc-500 text-sm">Choisissez une société puis un compte bancaire pour voir ses relevés.</p>
+            </div>
+          </template>
+
+          <template x-if="compteSelectionne">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div class="card p-4 lg:col-span-1">
+                <p class="text-xs text-zinc-500 uppercase tracking-widest mb-3">Relevés importés</p>
+                <div class="space-y-1.5 max-h-[32rem] overflow-y-auto">
+                  <template x-for="r in releves" :key="r.id">
+                    <button @click="selectionnerReleve(r.id)"
+                            class="w-full text-left px-3 py-2.5 rounded-lg transition-colors"
+                            :class="releveSelectionne === r.id ? 'bg-[#eef1f6]' : 'hover:bg-zinc-100/60'">
+                      <div class="flex items-center justify-between">
+                        <span class="text-sm text-zinc-800" x-text="`${nomMois(r.mois)} ${r.annee}`"></span>
+                        <span class="badge" :class="'badge-' + (r.statut === 'ok' ? 'ok' : (r.statut === 'ecart' ? 'ecart' : 'attente'))" x-text="r.statut"></span>
+                      </div>
+                      <p class="text-[11px] text-zinc-400 mt-0.5" x-text="`${r.nb_mouvements} mouvements · solde ${fmt(r.solde_initial)} — ${fmt(r.solde_final_calcule)}`"></p>
+                    </button>
+                  </template>
+                  <p x-show="releves.length === 0" class="text-xs text-zinc-400 py-4 text-center">Aucun relevé pour ce compte.</p>
+                </div>
+              </div>
+
+              <div class="card p-4 lg:col-span-2">
+                <template x-if="!releveSelectionne">
+                  <p class="text-sm text-zinc-400">Sélectionnez un relevé pour voir le détail.</p>
+                </template>
+                <template x-if="releveSelectionne">
+                  <div>
+                    <div class="flex items-center justify-between mb-3">
+                      <p class="font-semibold text-zinc-900 text-sm" x-text="releveCourant ? `${nomMois(releveCourant.mois)} ${releveCourant.annee}` : ''"></p>
+                      <div class="flex items-center gap-2">
+                        <span x-show="mouvementsSelectionnes.size > 0" class="text-[11px] text-[#0a1428]" x-text="`${mouvementsSelectionnes.size} sélectionné(s)`"></span>
+                        <button x-show="mouvementsSelectionnes.size > 0" @click="mouvementsSelectionnes = new Set()" class="text-[11px] text-zinc-500 hover:text-zinc-700">Désélectionner</button>
+                        <button @click="exporter('excel')" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white text-xs rounded-lg">Excel</button>
+                        <button @click="exporter('csv')" class="px-2.5 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded-lg">CSV</button>
+                        <button @click="exporterFec()" class="px-2.5 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded-lg">FEC</button>
+                        <button @click="supprimerReleve()" class="px-2.5 py-1 bg-zinc-100 hover:bg-rose-100 text-zinc-600 hover:text-rose-700 text-xs rounded-lg">Supprimer</button>
+                      </div>
+                    </div>
+
+                    <div x-show="releveCourant?.statut === 'ecart'" class="mb-3 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
+                      ⚠ Écart de solde : calculé <span x-text="fmt(releveCourant.solde_final_calcule)"></span>
+                      vs attendu <span x-text="fmt(releveCourant.solde_final_attendu)"></span> — à réviser avant mise en service.
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 mb-4 text-xs">
+                      <div class="bg-zinc-100/70 rounded-lg p-2.5"><p class="text-zinc-400">Solde initial</p><p class="text-zinc-800 font-medium" x-text="fmt(releveCourant?.solde_initial)"></p></div>
+                      <div class="bg-zinc-100/70 rounded-lg p-2.5"><p class="text-zinc-400">Solde final attendu</p><p class="text-zinc-800 font-medium" x-text="fmt(releveCourant?.solde_final_attendu)"></p></div>
+                      <div class="bg-zinc-100/70 rounded-lg p-2.5"><p class="text-zinc-400">Solde final calculé</p><p class="font-medium" :class="releveCourant?.statut==='ecart' ? 'text-rose-600' : 'text-emerald-600'" x-text="fmt(releveCourant?.solde_final_calcule)"></p></div>
+                    </div>
+
+                    <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                      <table class="w-full text-xs">
+                        <thead>
+                          <tr class="border-b border-zinc-200 text-zinc-500 uppercase tracking-wider">
+                            <th class="w-8 py-2">
+                              <input type="checkbox" :checked="mouvements.length > 0 && mouvementsSelectionnes.size === mouvements.length" @change="basculerToutSelectionner($event.target.checked)">
+                            </th>
+                            <th class="text-left py-2">Date</th><th class="text-left py-2">Libellé</th>
+                            <th class="text-right py-2">Débit</th><th class="text-right py-2">Crédit</th>
+                            <th class="text-left py-2 pl-3">Tiers</th>
+                            <th class="text-left py-2 pl-3">Compte comptable</th>
+                            <th class="text-left py-2 pl-3">Compte TVA</th>
+                            <th class="text-center py-2">Exporté</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <template x-for="m in mouvements" :key="m.id">
+                            <tr class="border-b border-zinc-200/70">
+                              <td class="py-2">
+                                <input type="checkbox" :checked="mouvementsSelectionnes.has(m.id)" @change="basculerSelectionMouvement(m.id)">
+                              </td>
+                              <td class="py-2 text-zinc-500 font-mono whitespace-nowrap" x-text="fmtDate(m.date)"></td>
+                              <td class="py-2 text-zinc-700" x-text="m.libelle"></td>
+                              <td class="py-2 text-right text-rose-600" x-text="m.debit ? fmt(m.debit) : ''"></td>
+                              <td class="py-2 text-right text-emerald-600" x-text="m.credit ? fmt(m.credit) : ''"></td>
+
+                              <!-- Case Tiers (client/fournisseur/salarié, filtrée selon le sens) -->
+                              <td class="py-2 pl-3 relative" x-data="{ open:false, q:'' }">
+                                <button type="button" @click="open = !open"
+                                        class="text-left w-full px-2 py-1 rounded-md text-[11px] truncate"
+                                        :class="(m.tiers && m.tiers.type !== 'compte') ? 'text-zinc-800 bg-zinc-100/70' : 'text-zinc-400 bg-zinc-100/50 border border-dashed border-zinc-200'"
+                                        x-text="(m.tiers && m.tiers.type !== 'compte') ? m.tiers.intitule : '—'"></button>
+                                <div x-show="open" @click.outside="open=false" x-cloak
+                                     class="absolute z-10 right-0 mt-1 w-64 bg-white border border-zinc-300 rounded-lg p-1.5 shadow-xl">
+                                  <input type="text" x-model.debounce.150ms="q" @click.stop placeholder="Rechercher (3 lettres min.)…"
+                                         class="w-full px-2 py-1 text-xs mb-1">
+                                  <div class="max-h-56 overflow-y-auto">
+                                    <button type="button" @click="assignerContrepartie(m, null); open=false"
+                                            class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-600">— Aucun —</button>
+                                    <p class="text-[9px] uppercase tracking-wider text-zinc-400 px-2 pt-1" x-text="m.debit ? 'Fournisseurs / salariés' : 'Clients'"></p>
+                                    <template x-for="t in optionsTiersPour(m, q)" :key="t.id">
+                                      <button type="button" @click="assignerContrepartie(m, t.id); open=false"
+                                              class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-700"
+                                              x-text="`${t.numero_compte} — ${t.intitule}`"></button>
+                                    </template>
+                                    <p x-show="optionsTiersPour(m, q).length === 0 && q.trim().length >= 3" class="text-[10px] text-zinc-300 px-2 py-1">Aucun résultat</p>
+                                    <p x-show="q.trim().length < 3" class="text-[10px] text-zinc-300 px-2 py-1">Tapez au moins 3 caractères</p>
+                                  </div>
+                                  <button type="button"
+                                          @click="open=false; ouvrirCreationCompte(m.debit ? ['fournisseur','salarie'] : ['client'], (id) => assignerContrepartie(m, id))"
+                                          class="w-full text-left px-2 py-1.5 mt-1 text-xs rounded text-[#101b3d] hover:bg-[#eef1f6] border-t border-zinc-100 pt-1.5">
+                                    + Créer un nouveau compte tiers
+                                  </button>
+                                </div>
+                              </td>
+
+                              <!-- Case Compte comptable (comptes ordinaires, type "compte", non filtrés par sens) -->
+                              <td class="py-2 pl-3 relative" x-data="{ open:false, q:'' }">
+                                <button type="button" @click="open = !open"
+                                        class="text-left w-full px-2 py-1 rounded-md text-[11px] truncate"
+                                        :class="(m.tiers && m.tiers.type === 'compte') ? 'text-zinc-800 bg-zinc-100/70' : 'text-zinc-400 bg-zinc-100/50 border border-dashed border-zinc-200'"
+                                        x-text="(m.tiers && m.tiers.type === 'compte') ? m.tiers.intitule : '— Compte par défaut —'"></button>
+                                <div x-show="open" @click.outside="open=false" x-cloak
+                                     class="absolute z-10 right-0 mt-1 w-64 bg-white border border-zinc-300 rounded-lg p-1.5 shadow-xl">
+                                  <input type="text" x-model.debounce.150ms="q" @click.stop placeholder="Rechercher (3 lettres min.)…"
+                                         class="w-full px-2 py-1 text-xs mb-1">
+                                  <div class="max-h-56 overflow-y-auto">
+                                    <button type="button" @click="assignerContrepartie(m, null); open=false"
+                                            class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-600">— Compte par défaut —</button>
+                                    <template x-for="c in optionsComptesPour(m, q)" :key="c.id">
+                                      <button type="button" @click="assignerContrepartie(m, c.id); open=false"
+                                              class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-700"
+                                              x-text="`${c.numero_compte} — ${c.intitule}`"></button>
+                                    </template>
+                                    <p x-show="optionsComptesPour(m, q).length === 0 && q.trim().length >= 3" class="text-[10px] text-zinc-300 px-2 py-1">Aucun résultat</p>
+                                    <p x-show="q.trim().length < 3" class="text-[10px] text-zinc-300 px-2 py-1">Tapez au moins 3 caractères</p>
+                                  </div>
+                                  <button type="button"
+                                          @click="open=false; ouvrirCreationCompte(['compte'], (id) => assignerContrepartie(m, id))"
+                                          class="w-full text-left px-2 py-1.5 mt-1 text-xs rounded text-[#101b3d] hover:bg-[#eef1f6] border-t border-zinc-100 pt-1.5">
+                                    + Créer un nouveau compte
+                                  </button>
+                                </div>
+                              </td>
+
+                              <!-- Case Compte TVA (optionnelle) — active uniquement si un compte comptable est choisi -->
+                              <td class="py-2 pl-3 relative" x-data="{ open:false }">
+                                <button type="button" :disabled="!(m.tiers && m.tiers.type === 'compte')"
+                                        @click="open = !open"
+                                        class="text-left w-full px-2 py-1 rounded-md text-[11px] truncate"
+                                        :class="!(m.tiers && m.tiers.type === 'compte') ? 'text-zinc-300 bg-zinc-100/40 cursor-not-allowed' : (m.taux_tva ? 'text-zinc-800 bg-zinc-100/70' : 'text-zinc-400 bg-zinc-100/50 border border-dashed border-zinc-200')"
+                                        x-text="m.taux_tva ? `${m.taux_tva.numero_compte_tva || '⚠'} — ${fmtTaux(m.taux_tva.taux)}` : (m.tiers && m.tiers.type === 'compte' ? '— Aucune (optionnel) —' : '—')"></button>
+                                <div x-show="open" @click.outside="open=false" x-cloak
+                                     class="absolute z-10 right-0 mt-1 w-56 bg-white border border-zinc-300 rounded-lg p-1.5 shadow-xl">
+                                  <button type="button" @click="assignerTauxTva(m, null); open=false"
+                                          class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-600">— Aucune (optionnel) —</button>
+                                  <template x-for="t in tauxTva" :key="t.id">
+                                    <button type="button" @click="assignerTauxTva(m, t.id); open=false"
+                                            class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-700"
+                                            x-text="`${fmtTaux(t.taux)} — ${t.numero_compte_tva || '⚠ compte manquant'} · ${t.intitule}`"></button>
+                                  </template>
+                                  <p x-show="tauxTva.length === 0" class="text-[10px] text-zinc-300 px-2 py-1">Aucun taux configuré (onglet Paramètres)</p>
+                                </div>
+                              </td>
+
+                              <td class="py-2 text-center" :title="m.date_dernier_export ? `Exporté le ${fmtDate(m.date_dernier_export.slice(0,10))}` : 'Jamais exporté'">
+                                <span x-show="m.date_dernier_export" class="badge badge-ok">✓</span>
+                                <span x-show="!m.date_dernier_export" class="text-zinc-300">—</span>
+                              </td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ─── FACTURES ─── -->
+      <template x-if="vue === 'factures'">
+        <div class="space-y-5">
+          <div class="card p-4 flex flex-wrap gap-3 items-center">
+            <select x-model.number="societeSelectionnee"
+                    @change="factureSelectionnee=null; if(societeSelectionnee){ chargerFactures(); chargerFacturesTraitees(); chargerTiersSociete(societeSelectionnee); chargerComptesRecurrents(societeSelectionnee); chargerComptesCollectifs(societeSelectionnee); chargerTauxTva(societeSelectionnee) } else { factures=[]; facturesTraitees=[] }"
+                    class="px-3 py-1.5 text-sm">
+              <option :value="null">— Choisir une société —</option>
+              <template x-for="s in societes" :key="s.id"><option :value="s.id" x-text="s.nom"></option></template>
+            </select>
+            <div class="flex gap-1 bg-zinc-100/70 rounded-lg p-1">
+              <button type="button" @click="typeFactureFiltre='achat'; factureSelectionnee=null; chargerFactures()"
+                      class="px-3 py-1 text-xs rounded-md transition-colors" :class="typeFactureFiltre==='achat' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'">Achats</button>
+              <button type="button" @click="typeFactureFiltre='vente'; factureSelectionnee=null; chargerFactures()"
+                      class="px-3 py-1 text-xs rounded-md transition-colors" :class="typeFactureFiltre==='vente' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'">Ventes</button>
+            </div>
+            <div class="flex-1"></div>
+            <button x-show="societeSelectionnee" @click="ouvrirUploadFacture()"
+                    class="px-3.5 py-1.5 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-xs font-medium rounded-lg">
+              Importer une facture
+            </button>
+          </div>
+
+          <template x-if="!societeSelectionnee">
+            <div class="card p-16 text-center border-dashed border-2 border-zinc-200">
+              <p class="text-zinc-500 text-sm">Choisissez une société pour voir ses factures.</p>
+            </div>
+          </template>
+
+          <template x-if="societeSelectionnee">
+            <div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div class="card p-4 lg:col-span-1">
+                <p class="text-xs text-zinc-500 uppercase tracking-widest mb-3"
+                   x-text="typeFactureFiltre === 'achat' ? 'Factures d\'achat' : 'Factures de vente'"></p>
+                <div class="space-y-1.5 max-h-[36rem] overflow-y-auto">
+                  <template x-for="f in factures" :key="f.id">
+                    <button @click="selectionnerFacture(f)"
+                            class="w-full text-left px-3 py-2.5 rounded-lg transition-colors"
+                            :class="factureSelectionnee && factureSelectionnee.id === f.id ? 'bg-[#eef1f6]' : 'hover:bg-zinc-100/60'">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm text-zinc-800 truncate" x-text="f.numero || '(numéro non détecté)'"></span>
+                        <span class="badge flex-shrink-0" :class="'badge-' + (f.statut === 'ok' ? 'ok' : 'attente')" x-text="f.statut === 'ok' ? 'ok' : 'à corriger'"></span>
+                      </div>
+                      <p class="text-[11px] text-zinc-400 mt-0.5 truncate" x-text="`${fmtDate(f.date)} · ${f.tiers_intitule || 'tiers non renseigné'} · ${fmt(f.montant_ttc)}`"></p>
+                    </button>
+                  </template>
+                  <p x-show="factures.length === 0" class="text-xs text-zinc-400 py-4 text-center">Aucune facture importée.</p>
+                </div>
+              </div>
+
+              <div class="card p-4 lg:col-span-2">
+                <template x-if="!factureSelectionnee">
+                  <p class="text-sm text-zinc-400">Sélectionnez une facture pour voir le détail, ou importez-en une nouvelle.</p>
+                </template>
+                <template x-if="factureSelectionnee">
+                  <div class="flex items-center justify-between mb-3">
+                    <p class="text-xs text-zinc-500" x-text="`Facture ${factures.findIndex(f => f.id === factureSelectionnee.id) + 1} / ${factures.length}`"></p>
+                    <div class="flex items-center gap-1">
+                      <button type="button" @click="naviguerFacture(-1)"
+                              :disabled="factures.findIndex(f => f.id === factureSelectionnee.id) <= 0"
+                              class="px-2.5 py-1 text-xs rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed">◀ Précédent</button>
+                      <button type="button" @click="naviguerFacture(1)"
+                              :disabled="factures.findIndex(f => f.id === factureSelectionnee.id) >= factures.length - 1"
+                              class="px-2.5 py-1 text-xs rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed">Suivant ▶</button>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="factureSelectionnee">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Aperçu du document -->
+                    <div>
+                      <p class="text-xs text-zinc-500 uppercase tracking-widest mb-2">Document</p>
+                      <template x-if="(factureSelectionnee.fichier_source || '').toLowerCase().endsWith('.pdf')">
+                        <iframe :src="`/api/factures/${factureSelectionnee.id}/fichier`" class="w-full h-96 rounded-lg border border-zinc-200 bg-white"></iframe>
+                      </template>
+                      <template x-if="factureSelectionnee.fichier_source && !factureSelectionnee.fichier_source.toLowerCase().endsWith('.pdf')">
+                        <img :src="`/api/factures/${factureSelectionnee.id}/fichier`" class="w-full max-h-96 object-contain rounded-lg border border-zinc-200 bg-white">
+                      </template>
+                    </div>
+
+                    <!-- Champs -->
+                    <div class="space-y-3">
+                      <p x-show="factureExtractionAvertissement" class="text-xs p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700" x-text="factureExtractionAvertissement"></p>
+                      <p x-show="factureExtractionNomDetecte" class="text-[11px] text-zinc-500">
+                        Nom détecté sur le document : <span class="text-zinc-700" x-text="factureExtractionNomDetecte"></span> — à rapprocher ci-dessous.
+                      </p>
+
+                      <div>
+                        <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Numéro de facture</label>
+                        <input type="text" x-model="factureForm.numero" class="w-full mt-1 px-3 py-1.5 text-sm">
+                      </div>
+                      <div>
+                        <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Date</label>
+                        <input type="date" x-model="factureForm.date" class="w-full mt-1 px-3 py-1.5 text-sm">
+                      </div>
+                      <div class="grid grid-cols-3 gap-2">
+                        <div>
+                          <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Montant HT</label>
+                          <input type="number" step="0.01" x-model.number="factureForm.montant_ht" @input="recalculerTtc()" class="w-full mt-1 px-3 py-1.5 text-sm">
+                        </div>
+                        <div>
+                          <label class="text-[11px] text-zinc-500 uppercase tracking-wider">TVA</label>
+                          <input type="number" step="0.01" x-model.number="factureForm.montant_tva" @input="recalculerTtc()" class="w-full mt-1 px-3 py-1.5 text-sm">
+                        </div>
+                        <div>
+                          <label class="text-[11px] text-zinc-500 uppercase tracking-wider">TTC</label>
+                          <input type="number" step="0.01" x-model.number="factureForm.montant_ttc" class="w-full mt-1 px-3 py-1.5 text-sm">
+                        </div>
+                      </div>
+
+                      <!-- Tiers : liste déroulante (tiers importés + comptes d'attente + création à la volée) -->
+                      <div class="relative" x-data="{ open:false, q:'' }">
+                        <label class="text-[11px] text-zinc-500 uppercase tracking-wider">
+                          <span x-text="factureSelectionnee.type === 'achat' ? 'Fournisseur' : 'Client'"></span>
+                        </label>
+                        <button type="button" @click="open = !open"
+                                class="w-full mt-1 text-left px-3 py-1.5 text-sm rounded-lg"
+                                :class="(factureForm.tiers_id || factureForm.compte_recurrent_id) ? 'text-zinc-800 bg-zinc-100/70 border border-zinc-200' : 'text-zinc-400 bg-zinc-100/50 border border-dashed border-zinc-200'"
+                                x-text="factureForm.tiers_id ? tiersLabelById(factureForm.tiers_id) : (factureForm.compte_recurrent_id ? compteRecurrentLabelById(factureForm.compte_recurrent_id) : '— Choisir un tiers —')"></button>
+                        <div x-show="open" @click.outside="open=false" x-cloak
+                             class="absolute z-10 left-0 right-0 mt-1 bg-white border border-zinc-300 rounded-lg p-1.5 shadow-xl">
+                          <input type="text" x-model.debounce.150ms="q" @click.stop placeholder="Rechercher (code ou nom)…" class="w-full px-2 py-1 text-xs mb-1">
+                          <div class="max-h-56 overflow-y-auto">
+                            <template x-for="t in optionsTiersFacture(q)" :key="t.id">
+                              <button type="button" @click="factureForm.tiers_id = t.id; factureForm.compte_recurrent_id = null; open=false"
+                                      class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-700"
+                                      x-text="`${t.numero_compte} — ${t.intitule}`"></button>
+                            </template>
+                            <p x-show="optionsTiersFacture(q).length === 0 && q.trim().length >= 3" class="text-[10px] text-zinc-300 px-2 py-1">Aucun résultat.</p>
+                            <p x-show="q.trim().length < 3" class="text-[10px] text-zinc-300 px-2 py-1">Tapez au moins 3 caractères</p>
+                            <template x-if="comptesRecurrents.length > 0">
+                              <div class="border-t border-zinc-100 mt-1 pt-1">
+                                <p class="text-[10px] text-zinc-400 uppercase tracking-wider px-2 py-0.5">Comptes d'attente</p>
+                                <template x-for="c in comptesRecurrents" :key="'cr-' + c.id">
+                                  <button type="button" @click="factureForm.compte_recurrent_id = c.id; factureForm.tiers_id = null; open=false"
+                                          class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-700"
+                                          x-text="`${c.numero_compte} — ${c.intitule}`"></button>
+                                </template>
+                              </div>
+                            </template>
+                          </div>
+                          <button type="button"
+                                  @click="open=false; ouvrirCreationCompte([factureSelectionnee.type === 'achat' ? 'fournisseur' : 'client'], (id) => { factureForm.tiers_id = id; factureForm.compte_recurrent_id = null })"
+                                  class="w-full text-left px-2 py-1.5 mt-1 text-xs rounded text-[#101b3d] hover:bg-[#eef1f6] border-t border-zinc-100 pt-1.5">
+                            + Créer un nouveau compte tiers
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Compte comptable (charge à l'achat, produit à la vente) — même liste que le module Relevés -->
+                      <div class="relative" x-data="{ open:false, q:'' }">
+                        <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Compte comptable</label>
+                        <button type="button" @click="open = !open"
+                                class="w-full mt-1 text-left px-3 py-1.5 text-sm rounded-lg"
+                                :class="factureForm.compte_id ? 'text-zinc-800 bg-zinc-100/70 border border-zinc-200' : 'text-zinc-400 bg-zinc-100/50 border border-dashed border-zinc-200'"
+                                x-text="factureForm.compte_id ? compteLabelById(factureForm.compte_id) : '— Choisir un compte —'"></button>
+                        <div x-show="open" @click.outside="open=false" x-cloak
+                             class="absolute z-10 left-0 right-0 mt-1 bg-white border border-zinc-300 rounded-lg p-1.5 shadow-xl">
+                          <input type="text" x-model.debounce.150ms="q" @click.stop placeholder="Rechercher (code ou nom)…" class="w-full px-2 py-1 text-xs mb-1">
+                          <div class="max-h-56 overflow-y-auto">
+                            <template x-for="t in optionsComptesFacture(q)" :key="t.id">
+                              <button type="button" @click="factureForm.compte_id = t.id; open=false"
+                                      class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-700"
+                                      x-text="`${t.numero_compte} — ${t.intitule}`"></button>
+                            </template>
+                            <p x-show="optionsComptesFacture(q).length === 0 && q.trim().length >= 3" class="text-[10px] text-zinc-300 px-2 py-1">Aucun compte — importez la liste de tiers (type « compte ») dans « Sociétés & comptes ».</p>
+                            <p x-show="q.trim().length < 3" class="text-[10px] text-zinc-300 px-2 py-1">Tapez au moins 3 caractères</p>
+                          </div>
+                          <button type="button"
+                                  @click="open=false; ouvrirCreationCompte(['compte'], (id) => factureForm.compte_id = id)"
+                                  class="w-full text-left px-2 py-1.5 mt-1 text-xs rounded text-[#101b3d] hover:bg-[#eef1f6] border-t border-zinc-100 pt-1.5">
+                            + Créer un nouveau compte
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- TVA : taux de cette société (Sociétés & comptes) -->
+                      <div>
+                        <label class="text-[11px] text-zinc-500 uppercase tracking-wider">TVA</label>
+                        <select x-model.number="factureForm.taux_tva_id" class="w-full mt-1 px-3 py-1.5 text-sm">
+                          <option :value="null">— Aucune —</option>
+                          <template x-for="t in tauxTva" :key="t.id">
+                            <option :value="t.id" x-text="`${t.taux}% — ${t.intitule || t.numero_compte_tva}`"></option>
+                          </template>
+                        </select>
+                        <p x-show="tauxTva.length === 0" class="text-[10px] text-zinc-400 mt-1">Aucun taux de TVA configuré pour cette société — à faire dans « Sociétés & comptes ».</p>
+                      </div>
+
+                      <div>
+                        <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Nature de la prestation</label>
+                        <input type="text" x-model="factureForm.nature_prestation" placeholder="optionnel" class="w-full mt-1 px-3 py-1.5 text-sm">
+                      </div>
+
+                      <div class="flex items-center gap-2 pt-2">
+                        <button @click="enregistrerFacture('a_corriger')" class="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-medium rounded-lg">Enregistrer</button>
+                        <button @click="enregistrerFacture('ok')" class="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg">Enregistrer et valider</button>
+                        <div class="flex-1"></div>
+                        <button @click="supprimerFacture()" class="px-3 py-1.5 bg-zinc-100 hover:bg-rose-100 text-zinc-600 hover:text-rose-700 text-xs font-medium rounded-lg">Supprimer</button>
+                      </div>
+                      <p x-show="factureMsg" class="text-xs" :class="factureErreur ? 'text-rose-600' : 'text-emerald-600'" x-text="factureMsg"></p>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- ─── Factures traitées — export FEC (évolution 2026-08-16) ─── -->
+            <div class="card p-4 mt-5">
+              <div class="flex items-center justify-between mb-3">
+                <p class="text-xs text-zinc-500 uppercase tracking-widest">Factures traitées — export FEC</p>
+                <div class="flex items-center gap-3">
+                  <span x-show="facturesTraiteesSelection.size > 0" class="text-[11px] text-[#101b3d]" x-text="`${facturesTraiteesSelection.size} sélectionnée(s)`"></span>
+                  <button @click="genererFecFactures()" :disabled="facturesTraitees.length === 0"
+                          class="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg">
+                    Générer le FEC<span x-show="facturesTraiteesSelection.size === 0"> (toutes)</span>
+                  </button>
+                </div>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="text-left text-zinc-500 border-b border-zinc-200">
+                      <th class="py-1.5 pr-2 w-6"><input type="checkbox" @change="toutSelectionnerFacturesTraitees($event)"
+                             :checked="facturesTraitees.length > 0 && facturesTraiteesSelection.size === facturesTraitees.length"></th>
+                      <th class="py-1.5 pr-2">Type</th>
+                      <th class="py-1.5 pr-2">Numéro</th>
+                      <th class="py-1.5 pr-2">Date</th>
+                      <th class="py-1.5 pr-2">Tiers</th>
+                      <th class="py-1.5 pr-2 text-right">TTC</th>
+                      <th class="py-1.5 pr-2">Statut</th>
+                      <th class="py-1.5 pr-2 w-6"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="f in facturesTraitees" :key="f.id">
+                      <tr class="border-b border-zinc-100 hover:bg-zinc-100/50">
+                        <td class="py-1.5 pr-2"><input type="checkbox" :checked="facturesTraiteesSelection.has(f.id)" @change="toggleSelectionFactureTraitee(f.id)"></td>
+                        <td class="py-1.5 pr-2 text-zinc-600" x-text="f.type === 'achat' ? 'Achat' : 'Vente'"></td>
+                        <td class="py-1.5 pr-2 text-zinc-800" x-text="f.numero || '—'"></td>
+                        <td class="py-1.5 pr-2 text-zinc-600" x-text="fmtDate(f.date)"></td>
+                        <td class="py-1.5 pr-2 text-zinc-600 truncate max-w-[10rem]" x-text="f.tiers_intitule || '—'"></td>
+                        <td class="py-1.5 pr-2 text-right text-zinc-800" x-text="fmt(f.montant_ttc)"></td>
+                        <td class="py-1.5 pr-2">
+                          <span x-show="f.date_dernier_export" class="badge badge-ok" :title="f.date_dernier_export ? `Transférée au FEC le ${fmtDate(f.date_dernier_export.slice(0,10))}` : ''">Transmise</span>
+                          <span x-show="!f.date_dernier_export" class="badge badge-attente">Prête</span>
+                        </td>
+                        <td class="py-1.5 pr-2 text-right"><button @click="supprimerFactureTraitee(f.id)" class="text-zinc-300 hover:text-rose-600" title="Supprimer">×</button></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <p x-show="facturesTraitees.length === 0" class="text-xs text-zinc-400 py-4 text-center">Aucune facture validée pour cette société — valide une facture (« Enregistrer et valider ») pour qu'elle apparaisse ici.</p>
+              </div>
+              <p x-show="fecFacturesMsg" class="text-xs mt-2" :class="fecFacturesErreur ? 'text-rose-600' : 'text-emerald-600'" x-text="fecFacturesMsg"></p>
+            </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ─── ANOMALIES ─── -->
+      <template x-if="vue === 'anomalies'">
+        <div class="card p-5">
+          <p class="font-semibold text-zinc-900 mb-3 text-sm">Journal des anomalies</p>
+          <div class="space-y-2">
+            <template x-for="a in anomalies" :key="a.id">
+              <div class="flex items-start justify-between gap-3 bg-zinc-100/70 rounded-lg px-3 py-2.5">
+                <div>
+                  <p class="text-sm text-zinc-700" x-text="a.description"></p>
+                  <p class="text-[11px] text-zinc-400 mt-0.5" x-text="a.date_creation ? fmtDate(a.date_creation) : ''"></p>
+                </div>
+                <button x-show="!a.resolue" @click="resoudreAnomalie(a.id)" class="flex-shrink-0 px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs rounded-lg">Marquer résolu</button>
+                <span x-show="a.resolue" class="badge badge-ok flex-shrink-0">Résolue</span>
+              </div>
+            </template>
+            <p x-show="anomalies.length === 0" class="text-xs text-zinc-400 py-4 text-center">Aucune anomalie enregistrée.</p>
+          </div>
+        </div>
+      </template>
+
+    </main>
+  </div>
+  </template>
+
+  <!-- ─────────────────── MODAL IMPORT RELEVÉ ─────────────────── -->
+  <div x-show="showUploadModal"
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/40 backdrop-blur-sm"
+       @click.self="if(!uploading) showUploadModal=false">
+    <div class="bg-white border border-zinc-300 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-zinc-900 text-sm">Importer un relevé</h2>
+        <button @click="if(!uploading) showUploadModal=false" class="text-zinc-400 hover:text-zinc-700">×</button>
+      </div>
+
+      <form @submit.prevent="soumettreUpload(false)" class="space-y-3">
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Mois</label>
+            <select x-model.number="uploadForm.mois" @change="rafraichirSuggestionSolde()" class="w-full mt-1 px-3 py-1.5 text-sm">
+              <template x-for="m in 12" :key="m"><option :value="m" x-text="nomMois(m)"></option></template>
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Année</label>
+            <input type="number" x-model.number="uploadForm.annee" @change="rafraichirSuggestionSolde()" class="w-full mt-1 px-3 py-1.5 text-sm">
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between">
+            <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Solde initial</label>
+            <button type="button" x-show="soldeInitialVerrouille" @click="soldeInitialVerrouille = false"
+                    class="text-[10px] text-[#101b3d] hover:text-[#0a1428]">🔓 Corriger</button>
+          </div>
+          <input type="number" step="0.01" x-model.number="uploadForm.solde_initial" required
+                 :disabled="soldeInitialVerrouille"
+                 class="w-full mt-1 px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+          <p class="text-[10px] text-zinc-400 mt-1" x-show="soldeInitialVerrouille">
+            🔒 Repris automatiquement du solde final validé du mois précédent — non modifiable (utilisez « Corriger » en cas de doute).
+          </p>
+          <p class="text-[10px] text-zinc-400 mt-1" x-show="!soldeInitialVerrouille">
+            Aucun relevé précédent validé pour ce compte à cette période — saisie manuelle requise.
+          </p>
+        </div>
+        <div>
+          <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Solde final attendu (cible, saisi manuellement)</label>
+          <input type="number" step="0.01" x-model.number="uploadForm.solde_final_attendu" required class="w-full mt-1 px-3 py-1.5 text-sm">
+          <p class="text-[10px] text-zinc-400 mt-1">
+            Détection automatique depuis le PDF pas encore activée (en attente d'un relevé réel pour calibrer le format par banque) — à saisir pour l'instant.
+          </p>
+        </div>
+        <div>
+          <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Fichier PDF</label>
+          <input type="file" accept=".pdf" @change="uploadForm.file = $event.target.files[0]" required class="w-full mt-1 text-xs">
+        </div>
+
+        <p x-show="uploadError" class="text-xs text-rose-600" x-text="uploadError"></p>
+
+        <div x-show="uploadConflit" class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
+          <p x-text="uploadConflit"></p>
+          <button type="button" @click="soumettreUpload(true)" class="mt-2 px-3 py-1 bg-amber-700 hover:bg-amber-600 text-white rounded-lg text-xs">
+            Confirmer et écraser le relevé existant
+          </button>
+        </div>
+
+        <button type="submit" :disabled="uploading" class="w-full py-2.5 bg-[#101b3d] hover:bg-[#1c2f5c] disabled:opacity-50 text-white text-sm font-medium rounded-xl">
+          <span x-text="uploading ? 'Extraction en cours…' : 'Importer et contrôler'"></span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ─────────────────── MODAL IMPORT FACTURE ─────────────────── -->
+  <div x-show="showUploadFactureModal"
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/40 backdrop-blur-sm"
+       @click.self="if(!uploadingFacture) showUploadFactureModal=false">
+    <div class="bg-white border border-zinc-300 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-zinc-900 text-sm">Importer une facture</h2>
+        <button @click="if(!uploadingFacture) showUploadFactureModal=false" class="text-zinc-400 hover:text-zinc-700">×</button>
+      </div>
+
+      <form @submit.prevent="soumettreUploadFacture()" class="space-y-3">
+        <div>
+          <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Type</label>
+          <div class="flex gap-1 bg-zinc-100/70 rounded-lg p-1 mt-1">
+            <button type="button" @click="uploadFactureForm.type='achat'" class="flex-1 py-1.5 text-xs rounded-md transition-colors" :class="uploadFactureForm.type==='achat' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'">Achat</button>
+            <button type="button" @click="uploadFactureForm.type='vente'" class="flex-1 py-1.5 text-xs rounded-md transition-colors" :class="uploadFactureForm.type==='vente' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'">Vente</button>
+          </div>
+        </div>
+        <div>
+          <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Fichier(s) (PDF ou image)</label>
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.bmp,.tif,.tiff,.webp" multiple @change="uploadFactureForm.files = Array.from($event.target.files)" required class="w-full mt-1 text-xs">
+          <p x-show="uploadFactureForm.files.length > 1" class="text-[10px] text-zinc-500 mt-1" x-text="`${uploadFactureForm.files.length} fichiers sélectionnés`"></p>
+          <p class="text-[10px] text-zinc-400 mt-1">
+            La lecture automatique fonctionne sur un PDF (texte ou scanné) ou sur une image (photo/scan, par OCR) — si rien n'est reconnu, les champs restent à compléter à la main.
+          </p>
+        </div>
+
+        <p x-show="uploadFactureError" class="text-xs text-rose-600" x-text="uploadFactureError"></p>
+
+        <button type="submit" :disabled="uploadingFacture" class="w-full py-2.5 bg-[#101b3d] hover:bg-[#1c2f5c] disabled:opacity-50 text-white text-sm font-medium rounded-xl">
+          <span x-text="uploadingFacture ? 'Lecture en cours…' : 'Importer et lire la facture'"></span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ─────────────────── MODAL CRÉATION DE COMPTE (tiers ou général) ─────────────────── -->
+  <div x-show="showCreationCompteModal"
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/40 backdrop-blur-sm"
+       @click.self="fermerCreationCompte()">
+    <div class="bg-white border border-zinc-300 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+      <template x-if="creationCompteEtape === 'regles'">
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold text-zinc-900 text-sm">Règles de création d'un compte</h2>
+            <button @click="fermerCreationCompte()" class="text-zinc-400 hover:text-zinc-700">×</button>
+          </div>
+          <div class="text-[12px] text-zinc-600 space-y-1.5">
+            <p><b>Fournisseur / Client</b> : « F » ou « C » + chiffre du taux de TVA (2=20%, 1=10%, 5=5,5%, 0=0%) + jusqu'à 10 initiales du nom.</p>
+            <p><b>Personnel</b> : « P » + jusqu'à 11 initiales du nom et prénom.</p>
+            <p><b>Compte général</b> : numéro libre du plan comptable, aucune règle imposée.</p>
+            <p class="text-zinc-400">Une suggestion est pré-remplie à l'étape suivante à partir du nom saisi — modifiable, mais doit respecter le motif ci-dessus (sauf compte général).</p>
+          </div>
+          <button @click="creationCompteEtape = 'formulaire'" class="w-full mt-4 py-2 bg-[#101b3d] hover:bg-[#1c2f5c] text-white text-sm font-medium rounded-lg">Bien compris</button>
+        </div>
+      </template>
+
+      <template x-if="creationCompteEtape === 'formulaire'">
+        <div>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold text-zinc-900 text-sm">Nouveau compte</h2>
+            <button @click="fermerCreationCompte()" class="text-zinc-400 hover:text-zinc-700">×</button>
+          </div>
+          <form @submit.prevent="validerCreationCompte()" class="space-y-3">
+            <template x-if="optionsTypeCreationCompte().length > 1">
+              <div class="grid grid-cols-2 gap-1.5">
+                <template x-for="opt in optionsTypeCreationCompte()" :key="opt.value">
+                  <button type="button" @click="creationCompteForm.type = opt.value; actualiserSuggestionCreationCompte()"
+                          class="py-1.5 text-xs font-medium rounded-lg border"
+                          :class="creationCompteForm.type === opt.value ? 'bg-[#101b3d] text-white border-[#101b3d]' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-100'"
+                          x-text="opt.label"></button>
+                </template>
+              </div>
+            </template>
+            <template x-if="optionsTypeCreationCompte().length === 1">
+              <p class="text-xs text-zinc-500">Type : <span class="font-medium text-zinc-800" x-text="optionsTypeCreationCompte()[0].label"></span></p>
+            </template>
+
+            <select x-show="creationCompteForm.type === 'fournisseur' || creationCompteForm.type === 'client'"
+                    x-model.number="creationCompteForm.taux" @change="actualiserSuggestionCreationCompte()" class="w-full px-3 py-1.5 text-sm">
+              <option :value="20">TVA 20%</option>
+              <option :value="10">TVA 10%</option>
+              <option :value="5.5">TVA 5,5%</option>
+              <option :value="0">TVA 0%</option>
+            </select>
+
+            <div x-show="['fournisseur','client','salarie'].includes(creationCompteForm.type)">
+              <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Compte collectif</label>
+              <select x-model.number="creationCompteForm.compte_collectif_id" class="w-full mt-1 px-3 py-1.5 text-sm">
+                <option :value="null">— Choisir un compte collectif —</option>
+                <template x-for="c in comptesCollectifs" :key="c.id">
+                  <option :value="c.id" x-text="`${c.numero_compte} — ${c.intitule}`"></option>
+                </template>
+              </select>
+              <p x-show="comptesCollectifs.length === 0" class="text-[10px] text-amber-600 mt-1">Aucun compte collectif configuré — créez-en un dans Sociétés & comptes avant de continuer.</p>
+            </div>
+
+            <input type="text" x-model="creationCompteForm.intitule" @input="actualiserSuggestionCreationCompte()"
+                   placeholder="Nom / intitulé" class="w-full px-3 py-1.5 text-sm">
+
+            <div>
+              <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Numéro de compte</label>
+              <input type="text" x-model="creationCompteForm.numero_compte" class="w-full mt-1 px-3 py-1.5 text-sm font-mono">
+            </div>
+
+            <div>
+              <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Journal d'appartenance (optionnel, informatif)</label>
+              <select x-model="creationCompteForm.journal" class="w-full mt-1 px-3 py-1.5 text-sm">
+                <option value="">— Aucun —</option>
+                <template x-for="j in creationCompteJournauxDisponibles" :key="j">
+                  <option :value="j" x-text="j"></option>
+                </template>
+              </select>
+            </div>
+
+            <p x-show="creationCompteErreur" class="text-xs text-rose-600" x-text="creationCompteErreur"></p>
+            <button type="submit" :disabled="creationCompteEnCours" class="w-full py-2.5 bg-[#101b3d] hover:bg-[#1c2f5c] disabled:opacity-50 text-white text-sm font-medium rounded-lg">
+              <span x-text="creationCompteEnCours ? 'Création…' : 'Créer le compte'"></span>
+            </button>
+          </form>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- ─────────────────── MODAL VALIDATION SOCIÉTÉ ─────────────────── -->
+  <div x-show="showValidationErreurModal"
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/40 backdrop-blur-sm"
+       @click.self="showValidationErreurModal=false">
+    <div class="bg-white border border-zinc-300 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold text-zinc-900 text-sm">Société non validée</h2>
+        <button @click="showValidationErreurModal=false" class="text-zinc-400 hover:text-zinc-700">×</button>
+      </div>
+      <p class="text-sm text-zinc-600" x-text="validationSocieteMessage"></p>
+      <button @click="showValidationErreurModal=false" class="w-full mt-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-sm font-medium rounded-lg">Compris</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function app() {
+  return {
+    // ─── Auth ─────────────────────────────────────────────────
+    authReady: false,
+    authentifie: false,
+    setupRequis: false,
+    user: null,
+    loginForm: { email: '', mot_de_passe: '' },
+    authError: '',
+
+    // ─── Navigation ─────────────────────────────────────────────
+    vue: 'dashboard',
+
+    // ─── Données ──────────────────────────────────────────────
+    dashboard: null,
+    societes: [],
+    comptes: [],
+    releves: [],
+    mouvements: [],
+    mouvementsSelectionnes: new Set(),
+    anomalies: [],
+    societeSelectionnee: null,
+    compteSelectionne: null,
+    releveSelectionne: null,
+    nouvelleSociete: '',
+    nouveauCompte: {
+      banque: 'Qonto', libelle: '', devise: 'EUR', mois_debut_exercice: 1,
+      numero_compte_bancaire: '', numero_compte_comptable: '', derniers_chiffres: '', journal_comptable: '',
+    },
+    modifierCompteErreur: '',
+
+    // ─── Tiers (comptes clients/fournisseurs) ────────────────────
+    tiers: [],
+    tiersRecherche: '',
+    tiersImportMsg: '',
+    tiersImportErreur: false,
+    tiersSociete: [],   // liste complète (client + fournisseur) de la société du compte affiché, pour le rattachement par ligne
+
+    // ─── Modale partagée de création de compte tiers/général (évolution du 2026-08-21) ──
+    showCreationCompteModal: false,
+    creationCompteEtape: 'regles',   // 'regles' | 'formulaire'
+    creationCompteTypesAutorises: [],
+    creationCompteCallback: null,
+    creationCompteForm: { type: '', taux: 20, compte_collectif_id: null, journal: '', numero_compte: '', intitule: '' },
+    creationCompteJournauxDisponibles: [],
+    creationCompteErreur: '',
+    creationCompteEnCours: false,
+
+    // ─── Validation de la société ────────────────────────────────
+    showValidationErreurModal: false,
+    validationSocieteMessage: '',
+
+    // ─── Comptes récurrents (compte d'attente, propres à la société sélectionnée) ──
+    comptesRecurrents: [],
+    nouveauCompteRecurrent: { numero_compte: '', intitule: '', est_defaut: false },
+    comptesRecurrentsMsg: '',
+    comptesRecurrentsErreur: false,
+
+    // ─── Comptes collectifs (401/411/420..., propres à la société sélectionnée) ──
+    comptesCollectifs: [],
+    nouveauCompteCollectif: { numero_compte: '', intitule: '' },
+    comptesCollectifsMsg: '',
+    comptesCollectifsErreur: false,
+
+    // ─── Taux de TVA (propres à la société sélectionnée) ─────
+    tauxTva: [],
+    nouveauTauxTVA: { taux: null, numero_compte_tva: '', intitule: '' },
+    tauxTvaMsg: '',
+    tauxTvaErreur: false,
+
+    // ─── Journaux factures (évolution 2026-08-16) ─────────────
+    journauxForm: { journal_achats: 'ACH', journal_ventes: 'VTE' },
+    journauxMsg: '',
+    journauxErreur: false,
+
+    // ─── Module B : factures achats/ventes ─────────────────────
+    factures: [],
+    typeFactureFiltre: 'achat',
+    factureSelectionnee: null,
+    factureForm: { tiers_id: null, compte_recurrent_id: null, compte_id: null, taux_tva_id: null, numero: '', date: '', montant_ht: null, montant_tva: null, montant_ttc: null, nature_prestation: '' },
+    factureExtractionNomDetecte: '',
+    factureExtractionAvertissement: '',
+    factureMsg: '',
+    factureErreur: false,
+    showUploadFactureModal: false,
+    uploadingFacture: false,
+    uploadFactureError: '',
+    uploadFactureForm: { type: 'achat', files: [] },
+
+    // ─── Factures traitées — export FEC (évolution 2026-08-16) ─────────────────
+    facturesTraitees: [],
+    facturesTraiteesSelection: new Set(),
+    fecFacturesMsg: '',
+    fecFacturesErreur: false,
+
+    // ─── Upload ─────────────────────────────────────────────────
+    showUploadModal: false,
+    uploading: false,
+    uploadError: '',
+    uploadConflit: '',
+    uploadForm: { mois: new Date().getMonth() + 1, annee: new Date().getFullYear(), solde_initial: null, solde_final_attendu: null, file: null },
+    soldeInitialVerrouille: false,
+
+    get releveCourant() { return this.releves.find(r => r.id === this.releveSelectionne) || null },
+
+    get moisExercice() {
+      const compte = this.comptes.find(c => c.id === this.compteSelectionne)
+      const debut = compte ? compte.mois_debut_exercice : 1
+      // Exercice contenant le relevé le plus récent (ou l'exercice en cours si aucun relevé)
+      const plusRecent = this.releves.length ? this.releves[0] : { mois: new Date().getMonth() + 1, annee: new Date().getFullYear() }
+      const anneeDebut = plusRecent.mois >= debut ? plusRecent.annee : plusRecent.annee - 1
+      let mois = debut, annee = anneeDebut
+      const cases = []
+      for (let i = 0; i < 12; i++) {
+        const releve = this.releves.find(r => r.mois === mois && r.annee === annee) || null
+        cases.push({ mois, annee, releve })
+        if (mois === 12) { mois = 1; annee += 1 } else { mois += 1 }
+      }
+      return cases
+    },
+
+    // ─── Init ─────────────────────────────────────────────────
+    async init() {
+      await this.checkAuth()
+      if (this.authentifie) {
+        await this.chargerSocietes()
+        await this.chargerDashboard()
+      }
+    },
+
+    async checkAuth() {
+      const r = await fetch('/api/auth/status')
+      const d = await r.json()
+      this.setupRequis = d.setup_requis
+      this.authentifie = d.authentifie
+      this.user = d.user
+      this.authReady = true
+    },
+
+    async doSetup() {
+      this.authError = ''
+      try {
+        const r = await fetch('/api/auth/setup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(this.loginForm) })
+        if (!r.ok) { const e = await r.json(); this.authError = e.detail; return }
+        await this.checkAuth()
+        await this.chargerSocietes()
+        await this.chargerDashboard()
+      } catch(e) { this.authError = 'Erreur réseau' }
+    },
+
+    async doLogin() {
+      this.authError = ''
+      try {
+        const r = await fetch('/api/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(this.loginForm) })
+        if (!r.ok) { const e = await r.json(); this.authError = e.detail; return }
+        await this.checkAuth()
+        await this.chargerSocietes()
+        await this.chargerDashboard()
+      } catch(e) { this.authError = 'Erreur réseau' }
+    },
+
+    async logout() {
+      await fetch('/api/auth/logout', { method: 'POST' })
+      this.authentifie = false
+      this.user = null
+    },
+
+    // ─── Dashboard ─────────────────────────────────────────────
+    async chargerDashboard() {
+      const r = await fetch('/api/dashboard')
+      this.dashboard = await r.json()
+    },
+
+    // ─── Sociétés / comptes ────────────────────────────────────
+    async chargerSocietes() {
+      const r = await fetch('/api/societes')
+      this.societes = await r.json()
+      // Sélectionne la première société par défaut (2026-08-16) : évite d'avoir des listes vides
+      // (comptes, taux TVA activés...) tant que l'utilisateur n'a pas explicitement choisi une
+      // société dans un autre onglet — trouvé en marche réelle sur le nouveau picker "N° compte TVA".
+      if (!this.societeSelectionnee && this.societes.length > 0) {
+        const s = this.societes[0]
+        this.societeSelectionnee = s.id
+        this.journauxForm = { journal_achats: s.journal_achats, journal_ventes: s.journal_ventes }
+        await this.chargerTiersSociete(s.id)
+        await this.chargerComptesRecurrents(s.id)
+        await this.chargerComptesCollectifs(s.id)
+        await this.chargerTauxTva(s.id)
+      }
+    },
+
+    async creerSociete() {
+      if (!this.nouvelleSociete.trim()) return
+      const r = await fetch('/api/societes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ nom: this.nouvelleSociete }) })
+      if (r.ok) { this.nouvelleSociete = ''; await this.chargerSocietes() }
+      else { const e = await r.json(); alert(e.detail) }
+    },
+
+    async supprimerSociete(id, nom) {
+      if (!confirm(`Supprimer la société ${nom}, ainsi que tous ses comptes bancaires, relevés, mouvements et tiers ?`)) return
+      const r = await fetch(`/api/societes/${id}`, { method: 'DELETE' })
+      if (!r.ok) { const e = await r.json(); alert(e.detail); return }
+      if (this.societeSelectionnee === id) {
+        this.societeSelectionnee = null
+        this.comptes = []
+        this.compteSelectionne = null
+        this.releveSelectionne = null
+        this.releves = []
+        this.mouvements = []
+        this.tiers = []
+      }
+      await this.chargerSocietes()
+      await this.chargerDashboard()
+    },
+
+    async chargerComptes(societeId) {
+      if (!societeId) { this.comptes = []; return }
+      const r = await fetch(`/api/comptes?societe_id=${societeId}`)
+      this.comptes = await r.json()
+    },
+
+    async creerCompte() {
+      if (!this.societeSelectionnee || !this.nouveauCompte.libelle.trim()) return
+      const payload = { societe_id: this.societeSelectionnee, ...this.nouveauCompte }
+      const r = await fetch('/api/comptes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+      if (r.ok) {
+        this.nouveauCompte = {
+          banque: 'Qonto', libelle: '', devise: 'EUR', mois_debut_exercice: 1,
+          numero_compte_bancaire: '', numero_compte_comptable: '', derniers_chiffres: '', journal_comptable: '',
+        }
+        await this.chargerComptes(this.societeSelectionnee)
+        await this.chargerSocietes()
+      } else { const e = await r.json(); alert(e.detail) }
+    },
+
+    async modifierCompte(compteId, form) {
+      this.modifierCompteErreur = ''
+      const r = await fetch(`/api/comptes/${compteId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+      })
+      const d = await r.json()
+      if (!r.ok) { this.modifierCompteErreur = d.detail || 'Erreur'; return false }
+      await this.chargerComptes(this.societeSelectionnee)
+      return true
+    },
+
+    // ─── Comptes tiers ─────────────────────────────────────────
+    async chargerTiers() {
+      if (!this.societeSelectionnee) { this.tiers = []; return }
+      const params = new URLSearchParams({ societe_id: this.societeSelectionnee })
+      if (this.tiersRecherche.trim()) params.set('q', this.tiersRecherche.trim())
+      const r = await fetch(`/api/tiers?${params}`)
+      this.tiers = await r.json()
+    },
+
+    async chargerTiersSociete(societeId) {
+      if (!societeId) { this.tiersSociete = []; return }
+      const r = await fetch(`/api/tiers?societe_id=${societeId}`)
+      this.tiersSociete = await r.json()
+    },
+
+    async importerTiers(event) {
+      const file = event.target.files[0]
+      if (!file || !this.societeSelectionnee) return
+      this.tiersImportMsg = ''
+      const fd = new FormData()
+      fd.append('societe_id', this.societeSelectionnee)
+      fd.append('file', file)
+      try {
+        const r = await fetch('/api/tiers/import', { method: 'POST', body: fd })
+        const d = await r.json()
+        if (!r.ok) { this.tiersImportErreur = true; this.tiersImportMsg = d.detail || 'Erreur'; return }
+        this.tiersImportErreur = false
+        this.tiersImportMsg = `${d.crees} créé(s), ${d.mis_a_jour} mis à jour, ${d.ignores} ignoré(s).`
+        await this.chargerTiers()
+        if (this.compteSelectionne) await this.chargerTiersSociete(this.societeSelectionnee)
+      } catch (e) {
+        this.tiersImportErreur = true
+        this.tiersImportMsg = 'Erreur réseau'
+      }
+      event.target.value = ''
+    },
+
+    optionsTiersPour(m, q) {
+      // Débit = fournisseurs + salariés (liste mélangée) · Crédit = clients
+      // Recherche minimum 3 caractères (évolution du 2026-08-21, demande Anis) — aucun résultat avant.
+      const motif = (q || '').trim().toLowerCase()
+      if (motif.length < 3) return []
+      const typesAutorises = m.debit ? ['fournisseur', 'salarie'] : ['client']
+      let liste = this.tiersSociete.filter(t => typesAutorises.includes(t.type))
+      liste = liste.filter(t => t.intitule.toLowerCase().includes(motif) || t.numero_compte.toLowerCase().includes(motif))
+      return liste.slice(0, 30)
+    },
+
+    optionsComptesPour(m, q) {
+      // Comptes comptables ordinaires (type "compte"), disponibles quel que soit le sens
+      // Recherche minimum 3 caractères (évolution du 2026-08-21, demande Anis) — aucun résultat avant.
+      const motif = (q || '').trim().toLowerCase()
+      if (motif.length < 3) return []
+      let liste = this.tiersSociete.filter(t => t.type === 'compte')
+      liste = liste.filter(t => t.intitule.toLowerCase().includes(motif) || t.numero_compte.toLowerCase().includes(motif))
+      return liste.slice(0, 30)
+    },
+
+    async assignerContrepartie(m, tiersId) {
+      // Changer de tiers/compte réinitialise systématiquement le compte TVA choisi (n'a de sens
+      // que pour le compte comptable précédemment sélectionné).
+      const r = await fetch(`/api/mouvements/${m.id}/contrepartie`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tiers_id: tiersId, taux_tva_id: null }),
+      })
+      if (r.ok) {
+        m.tiers_id = tiersId
+        m.tiers = tiersId ? this.tiersSociete.find(t => t.id === tiersId) || null : null
+        m.taux_tva_id = null
+        m.taux_tva = null
+      }
+    },
+
+    async assignerTauxTva(m, tauxId) {
+      const r = await fetch(`/api/mouvements/${m.id}/contrepartie`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tiers_id: m.tiers_id, taux_tva_id: tauxId }),
+      })
+      if (r.ok) {
+        m.taux_tva_id = tauxId
+        m.taux_tva = tauxId ? this.tauxTva.find(t => t.id === tauxId) || null : null
+      }
+    },
+
+    // ─── Comptes récurrents (paramètres globaux) ────────────────
+    async chargerComptesRecurrents(societeId) {
+      if (!societeId) { this.comptesRecurrents = []; return }
+      const r = await fetch(`/api/comptes-recurrents?societe_id=${societeId}`)
+      this.comptesRecurrents = await r.json()
+      this.comptesRecurrentsMsg = ''
+    },
+
+    async creerCompteRecurrent() {
+      if (!this.societeSelectionnee) return
+      if (!this.nouveauCompteRecurrent.numero_compte.trim() || !this.nouveauCompteRecurrent.intitule.trim()) return
+      this.comptesRecurrentsMsg = ''
+      const r = await fetch('/api/comptes-recurrents', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...this.nouveauCompteRecurrent, societe_id: this.societeSelectionnee }),
+      })
+      const d = await r.json()
+      if (r.ok) {
+        this.nouveauCompteRecurrent = { numero_compte: '', intitule: '', est_defaut: false }
+        this.comptesRecurrentsErreur = false
+        this.comptesRecurrentsMsg = 'Compte ajouté.'
+        await this.chargerComptesRecurrents(this.societeSelectionnee)
+      } else {
+        this.comptesRecurrentsErreur = true
+        this.comptesRecurrentsMsg = d.detail || 'Erreur'
+      }
+    },
+
+    async definirCompteRecurrentDefaut(id) {
+      await fetch(`/api/comptes-recurrents/${id}/defaut`, { method: 'PATCH' })
+      await this.chargerComptesRecurrents(this.societeSelectionnee)
+    },
+
+    async supprimerCompteRecurrent(id) {
+      if (!confirm('Supprimer ce compte récurrent ?')) return
+      const r = await fetch(`/api/comptes-recurrents/${id}`, { method: 'DELETE' })
+      if (!r.ok) { const e = await r.json(); alert(e.detail); return }
+      await this.chargerComptesRecurrents(this.societeSelectionnee)
+    },
+
+    // ─── Comptes collectifs (401/411/420..., propres à la société sélectionnée) ──
+    async chargerComptesCollectifs(societeId) {
+      if (!societeId) { this.comptesCollectifs = []; return }
+      const r = await fetch(`/api/comptes-collectifs?societe_id=${societeId}`)
+      this.comptesCollectifs = await r.json()
+      this.comptesCollectifsMsg = ''
+    },
+
+    async creerCompteCollectif() {
+      if (!this.societeSelectionnee) return
+      if (!this.nouveauCompteCollectif.numero_compte.trim() || !this.nouveauCompteCollectif.intitule.trim()) return
+      this.comptesCollectifsMsg = ''
+      const r = await fetch('/api/comptes-collectifs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...this.nouveauCompteCollectif, societe_id: this.societeSelectionnee }),
+      })
+      const d = await r.json()
+      if (r.ok) {
+        this.nouveauCompteCollectif = { numero_compte: '', intitule: '' }
+        this.comptesCollectifsErreur = false
+        this.comptesCollectifsMsg = 'Compte collectif ajouté.'
+        await this.chargerComptesCollectifs(this.societeSelectionnee)
+      } else {
+        this.comptesCollectifsErreur = true
+        this.comptesCollectifsMsg = d.detail || 'Erreur'
+      }
+    },
+
+    async supprimerCompteCollectif(id) {
+      if (!confirm('Supprimer ce compte collectif ? Les comptes tiers déjà rattachés perdront ce rattachement.')) return
+      await fetch(`/api/comptes-collectifs/${id}`, { method: 'DELETE' })
+      await this.chargerComptesCollectifs(this.societeSelectionnee)
+    },
+
+    // ─── Taux de TVA (propres à la société sélectionnée) ─────
+    async chargerTauxTva(societeId) {
+      if (!societeId) { this.tauxTva = []; return }
+      const r = await fetch(`/api/taux-tva?societe_id=${societeId}`)
+      this.tauxTva = await r.json()
+      this.tauxTvaMsg = ''
+    },
+
+    async creerTauxTVA() {
+      if (!this.societeSelectionnee) return
+      if (this.nouveauTauxTVA.taux === null || !this.nouveauTauxTVA.numero_compte_tva.trim() || !this.nouveauTauxTVA.intitule.trim()) return
+      this.tauxTvaMsg = ''
+      const r = await fetch('/api/taux-tva', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...this.nouveauTauxTVA, societe_id: this.societeSelectionnee }),
+      })
+      const d = await r.json()
+      if (r.ok) {
+        this.nouveauTauxTVA = { taux: null, numero_compte_tva: '', intitule: '' }
+        this.tauxTvaErreur = false
+        this.tauxTvaMsg = 'Taux ajouté.'
+        await this.chargerTauxTva(this.societeSelectionnee)
+      } else {
+        this.tauxTvaErreur = true
+        this.tauxTvaMsg = d.detail || 'Erreur'
+      }
+    },
+
+    async supprimerTauxTVA(id) {
+      if (!confirm('Supprimer ce taux de TVA ?')) return
+      await fetch(`/api/taux-tva/${id}`, { method: 'DELETE' })
+      await this.chargerTauxTva(this.societeSelectionnee)
+    },
+
+    fmtTaux(t) {
+      return `${Number(t).toString().replace('.', ',')} %`
+    },
+
+    async supprimerCompte(id) {
+      if (!confirm('Supprimer ce compte et tous ses relevés/mouvements ?')) return
+      await fetch(`/api/comptes/${id}`, { method: 'DELETE' })
+      await this.chargerComptes(this.societeSelectionnee)
+      await this.chargerSocietes()
+    },
+
+    async supprimerCompteDepuisReleves() {
+      if (!this.compteSelectionne) return
+      const compte = this.comptes.find(c => c.id === this.compteSelectionne)
+      const nom = compte ? `${compte.libelle} (${compte.banque})` : 'ce compte'
+      if (!confirm(`Supprimer le compte ${nom} et tous ses relevés/mouvements ?`)) return
+      await fetch(`/api/comptes/${this.compteSelectionne}`, { method: 'DELETE' })
+      this.compteSelectionne = null
+      this.releveSelectionne = null
+      this.releves = []
+      this.mouvements = []
+      await this.chargerComptes(this.societeSelectionnee)
+      await this.chargerSocietes()
+    },
+
+    // ─── Relevés ─────────────────────────────────────────────
+    async selectionnerCompte(societeId, compteId) {
+      this.societeSelectionnee = societeId
+      this.compteSelectionne = compteId
+      this.releveSelectionne = null
+      this.mouvements = []
+      await this.chargerComptes(societeId)
+      await this.chargerReleves()
+      await this.chargerTiersSociete(societeId)
+      await this.chargerComptesCollectifs(societeId)
+    },
+
+    async chargerReleves() {
+      if (!this.compteSelectionne) { this.releves = []; return }
+      const r = await fetch(`/api/releves?compte_id=${this.compteSelectionne}`)
+      this.releves = await r.json()
+    },
+
+    async selectionnerReleve(id) {
+      this.releveSelectionne = id
+      this.mouvementsSelectionnes = new Set()
+      const r = await fetch(`/api/releves/${id}/mouvements`)
+      this.mouvements = await r.json()
+    },
+
+    async rechargerMouvements() {
+      if (!this.releveSelectionne) return
+      const r = await fetch(`/api/releves/${this.releveSelectionne}/mouvements`)
+      this.mouvements = await r.json()
+    },
+
+    basculerSelectionMouvement(id) {
+      if (this.mouvementsSelectionnes.has(id)) this.mouvementsSelectionnes.delete(id)
+      else this.mouvementsSelectionnes.add(id)
+      this.mouvementsSelectionnes = new Set(this.mouvementsSelectionnes)
+    },
+
+    basculerToutSelectionner(coche) {
+      this.mouvementsSelectionnes = coche ? new Set(this.mouvements.map(m => m.id)) : new Set()
+    },
+
+    async supprimerReleve() {
+      if (!this.releveSelectionne || !confirm('Supprimer ce relevé et ses mouvements ?')) return
+      await fetch(`/api/releves/${this.releveSelectionne}`, { method: 'DELETE' })
+      this.releveSelectionne = null
+      this.mouvements = []
+      await this.chargerReleves()
+      await this.chargerDashboard()
+    },
+
+    async supprimerReleveDepuisGrille(releveId, mois, annee) {
+      if (!confirm(`Supprimer le relevé de ${this.nomMois(mois)} ${annee} et ses mouvements ?`)) return
+      await fetch(`/api/releves/${releveId}`, { method: 'DELETE' })
+      if (this.releveSelectionne === releveId) {
+        this.releveSelectionne = null
+        this.mouvements = []
+      }
+      await this.chargerReleves()
+      await this.chargerDashboard()
+    },
+
+    exporter(fmt) {
+      if (!this.releveSelectionne) return
+      const params = this.mouvementsSelectionnes.size > 0 ? `?mouvement_ids=${[...this.mouvementsSelectionnes].join(',')}` : ''
+      window.location.href = `/api/releves/${this.releveSelectionne}/export${fmt === 'csv' ? '-csv' : ''}${params}`
+      setTimeout(() => this.rechargerMouvements(), 800)
+    },
+
+    exporterConsolide() {
+      const annee = prompt("Année de début de l'exercice à exporter ?", new Date().getFullYear())
+      if (!annee) return
+      window.location.href = `/api/comptes/${this.compteSelectionne}/export-consolide?annee_exercice=${annee}`
+    },
+
+    exporterFec() {
+      if (!this.releveSelectionne) return
+      const params = this.mouvementsSelectionnes.size > 0 ? `?mouvement_ids=${[...this.mouvementsSelectionnes].join(',')}` : ''
+      window.location.href = `/api/releves/${this.releveSelectionne}/export-fec${params}`
+      setTimeout(() => this.rechargerMouvements(), 800)
+    },
+
+    exporterFecExercice() {
+      const annee = prompt("Année de début de l'exercice à exporter (FEC) ?", new Date().getFullYear())
+      if (!annee) return
+      window.location.href = `/api/comptes/${this.compteSelectionne}/export-fec-exercice?annee_exercice=${annee}`
+    },
+
+    // ─── Upload ─────────────────────────────────────────────────
+    async prepareUpload() {
+      this.uploadError = ''
+      this.uploadConflit = ''
+      await this.rafraichirSuggestionSolde()
+    },
+
+    async rafraichirSuggestionSolde() {
+      if (!this.compteSelectionne) return
+      const r = await fetch(`/api/comptes/${this.compteSelectionne}/suggestion-solde-initial?mois=${this.uploadForm.mois}&annee=${this.uploadForm.annee}`)
+      const d = await r.json()
+      if (d.solde_initial_suggere != null) {
+        this.uploadForm.solde_initial = d.solde_initial_suggere
+        this.soldeInitialVerrouille = true
+      } else {
+        this.uploadForm.solde_initial = null
+        this.soldeInitialVerrouille = false
+      }
+    },
+
+    async soumettreUpload(force) {
+      this.uploadError = ''
+      if (!force) this.uploadConflit = ''
+      if (!this.uploadForm.file) { this.uploadError = 'Fichier PDF requis'; return }
+
+      this.uploading = true
+      const fd = new FormData()
+      fd.append('compte_id', this.compteSelectionne)
+      fd.append('mois', this.uploadForm.mois)
+      fd.append('annee', this.uploadForm.annee)
+      fd.append('solde_initial', this.uploadForm.solde_initial)
+      fd.append('solde_final_attendu', this.uploadForm.solde_final_attendu)
+      fd.append('force', force ? 'true' : 'false')
+      fd.append('file', this.uploadForm.file)
+
+      try {
+        const r = await fetch('/api/releves/upload', { method: 'POST', body: fd })
+        const d = await r.json()
+        if (r.status === 409) { this.uploadConflit = d.detail; this.uploading = false; return }
+        if (!r.ok) { this.uploadError = d.detail || 'Erreur'; this.uploading = false; return }
+
+        this.showUploadModal = false
+        this.uploadConflit = ''
+        await this.chargerReleves()
+        await this.selectionnerReleve(d.releve_id)
+        await this.chargerDashboard()
+        if (d.alerte) alert(`⚠ Écart de solde détecté : calculé ${d.solde_final_calcule} vs attendu ${d.solde_final_attendu}.\nÀ réviser avant de considérer ce relevé comme validé.`)
+      } catch(e) {
+        this.uploadError = 'Erreur réseau'
+      }
+      this.uploading = false
+    },
+
+    // ─── Anomalies ─────────────────────────────────────────────
+    async chargerAnomalies() {
+      const r = await fetch('/api/anomalies')
+      this.anomalies = await r.json()
+    },
+
+    async resoudreAnomalie(id) {
+      await fetch(`/api/anomalies/${id}/resoudre`, { method: 'PATCH' })
+      await this.chargerAnomalies()
+      await this.chargerDashboard()
+    },
+
+    // ─── Module B : factures achats/ventes ─────────────────────
+    async chargerFactures() {
+      if (!this.societeSelectionnee) { this.factures = []; return }
+      const params = new URLSearchParams({ societe_id: this.societeSelectionnee, type: this.typeFactureFiltre })
+      const r = await fetch(`/api/factures?${params}`)
+      this.factures = await r.json()
+    },
+
+
+    async sauvegarderJournaux() {
+      this.journauxMsg = ''
+      const r = await fetch(`/api/societes/${this.societeSelectionnee}/journaux`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.journauxForm),
+      })
+      const d = await r.json()
+      if (!r.ok) { this.journauxErreur = true; this.journauxMsg = d.detail || 'Erreur'; return }
+      this.journauxErreur = false
+      this.journauxMsg = 'Enregistré.'
+      const idx = this.societes.findIndex(s => s.id === this.societeSelectionnee)
+      if (idx !== -1) this.societes[idx] = d
+    },
+
+    // ─── Factures traitées — export FEC (évolution 2026-08-16) ─────────────────
+
+    async chargerFacturesTraitees() {
+      if (!this.societeSelectionnee) { this.facturesTraitees = []; return }
+      const r = await fetch(`/api/factures?societe_id=${this.societeSelectionnee}&statut=ok`)
+      this.facturesTraitees = await r.json()
+      this.facturesTraiteesSelection = new Set()
+    },
+
+    toggleSelectionFactureTraitee(id) {
+      if (this.facturesTraiteesSelection.has(id)) this.facturesTraiteesSelection.delete(id)
+      else this.facturesTraiteesSelection.add(id)
+    },
+
+    toutSelectionnerFacturesTraitees(event) {
+      this.facturesTraiteesSelection = event.target.checked ? new Set(this.facturesTraitees.map(f => f.id)) : new Set()
+    },
+
+    genererFecFactures() {
+      if (!this.societeSelectionnee) return
+      this.fecFacturesMsg = ''
+      const params = this.facturesTraiteesSelection.size > 0 ? `&facture_ids=${[...this.facturesTraiteesSelection].join(',')}` : ''
+      window.location.href = `/api/factures/export-fec?societe_id=${this.societeSelectionnee}${params}`
+      setTimeout(() => this.chargerFacturesTraitees(), 800)
+    },
+
+    async supprimerFactureTraitee(id) {
+      if (!confirm('Supprimer cette facture ?')) return
+      await fetch(`/api/factures/${id}`, { method: 'DELETE' })
+      if (this.factureSelectionnee && this.factureSelectionnee.id === id) this.factureSelectionnee = null
+      await this.chargerFacturesTraitees()
+      await this.chargerFactures()
+      await this.chargerDashboard()
+    },
+
+    ouvrirUploadFacture() {
+      this.uploadFactureError = ''
+      this.uploadFactureForm = { type: this.typeFactureFiltre, files: [] }
+      this.showUploadFactureModal = true
+    },
+
+    async soumettreUploadFacture() {
+      if (!this.uploadFactureForm.files.length) { this.uploadFactureError = 'Fichier requis'; return }
+      this.uploadingFacture = true
+      this.uploadFactureError = ''
+      const fd = new FormData()
+      fd.append('societe_id', this.societeSelectionnee)
+      fd.append('type', this.uploadFactureForm.type)
+      for (const fichier of this.uploadFactureForm.files) fd.append('files', fichier)
+
+      try {
+        const r = await fetch('/api/factures/upload', { method: 'POST', body: fd })
+        const resultats = await r.json()
+        if (!r.ok) { this.uploadFactureError = resultats.detail || 'Erreur'; this.uploadingFacture = false; return }
+
+        const reussies = resultats.filter(d => !d.erreur)
+        const echouees = resultats.filter(d => d.erreur)
+        this.typeFactureFiltre = this.uploadFactureForm.type
+        await this.chargerFactures()
+        await this.chargerFacturesTraitees()
+        await this.chargerDashboard()
+
+        if (echouees.length) {
+          this.uploadFactureError = `${reussies.length} facture(s) importée(s), ${echouees.length} échec(s) : ${echouees.map(e => e.fichier_source).join(', ')}`
+        } else {
+          this.showUploadFactureModal = false
+        }
+        if (reussies.length) {
+          this.selectionnerFacture(reussies[0], reussies[0].nom_tiers_detecte, reussies[0].avertissement)
+        }
+      } catch (e) {
+        this.uploadFactureError = 'Erreur réseau'
+      }
+      this.uploadingFacture = false
+    },
+
+    selectionnerFacture(f, nomDetecte, avertissement) {
+      this.factureSelectionnee = f
+      this.factureForm = {
+        tiers_id: f.tiers_id, compte_recurrent_id: f.compte_recurrent_id, compte_id: f.compte_id, taux_tva_id: f.taux_tva_id,
+        numero: f.numero || '', date: f.date || '',
+        montant_ht: f.montant_ht, montant_tva: f.montant_tva, montant_ttc: f.montant_ttc,
+        nature_prestation: f.nature_prestation || '',
+      }
+      this.factureExtractionNomDetecte = nomDetecte || ''
+      this.factureExtractionAvertissement = avertissement || ''
+      this.factureMsg = ''
+    },
+
+    naviguerFacture(delta) {
+      if (!this.factureSelectionnee || this.factures.length === 0) return
+      const idx = this.factures.findIndex(f => f.id === this.factureSelectionnee.id)
+      const suivant = idx + delta
+      if (idx !== -1 && suivant >= 0 && suivant < this.factures.length) {
+        this.selectionnerFacture(this.factures[suivant])
+      }
+    },
+
+    recalculerTtc() {
+      const ht = this.factureForm.montant_ht, tva = this.factureForm.montant_tva
+      if (ht != null && tva != null) this.factureForm.montant_ttc = Math.round((ht + tva) * 100) / 100
+    },
+
+    tiersLabelById(id) {
+      const t = this.tiersSociete.find(x => x.id === id)
+      return t ? `${t.numero_compte} — ${t.intitule}` : ''
+    },
+
+    optionsTiersFacture(q) {
+      // Recherche minimum 3 caractères (évolution du 2026-08-21, demande Anis) — aucun résultat avant.
+      const motif = (q || '').trim().toLowerCase()
+      if (motif.length < 3) return []
+      const typeAttendu = this.factureSelectionnee?.type === 'achat' ? 'fournisseur' : 'client'
+      let options = this.tiersSociete.filter(t => t.type === typeAttendu)
+      options = options.filter(t => t.intitule.toLowerCase().includes(motif) || t.numero_compte.toLowerCase().includes(motif))
+      return options.slice(0, 30)
+    },
+
+    compteRecurrentLabelById(id) {
+      const c = this.comptesRecurrents.find(x => x.id === id)
+      return c ? `${c.numero_compte} — ${c.intitule}` : ''
+    },
+
+    // ─── Modale partagée de création de compte tiers/général (évolution du 2026-08-21) ──
+    // Remplace l'ancienne numérotation auto en lecture seule : la règle F/C+TVA+initiales (ou
+    // P+initiales pour le personnel) reste la même, mais sert désormais de suggestion pré-remplie
+    // et modifiable — la conformité est vérifiée côté serveur à l'enregistrement.
+
+    optionsTypeCreationCompte() {
+      const tous = [
+        { value: 'fournisseur', label: 'Fournisseur' },
+        { value: 'client', label: 'Client' },
+        { value: 'salarie', label: 'Personnel' },
+        { value: 'compte', label: 'Compte général' },
+      ]
+      return tous.filter(t => this.creationCompteTypesAutorises.includes(t.value))
+    },
+
+    async ouvrirCreationCompte(typesAutorises, onCree) {
+      this.creationCompteTypesAutorises = (typesAutorises && typesAutorises.length)
+        ? typesAutorises : ['fournisseur', 'client', 'salarie', 'compte']
+      this.creationCompteCallback = onCree
+      const options = this.optionsTypeCreationCompte()
+      this.creationCompteForm = {
+        type: options.length === 1 ? options[0].value : '',
+        taux: 20, compte_collectif_id: null, journal: '', numero_compte: '', intitule: '',
+      }
+      this.creationCompteErreur = ''
+      this.creationCompteEtape = 'regles'
+      this.showCreationCompteModal = true
+      await this.chargerJournauxDisponibles()
+    },
+
+    fermerCreationCompte() {
+      if (this.creationCompteEnCours) return
+      this.showCreationCompteModal = false
+    },
+
+    async chargerJournauxDisponibles() {
+      const s = this.societes.find(x => x.id === this.societeSelectionnee)
+      const set = new Set()
+      if (s?.journal_achats) set.add(s.journal_achats)
+      if (s?.journal_ventes) set.add(s.journal_ventes)
+      if (this.societeSelectionnee) {
+        const r = await fetch(`/api/comptes?societe_id=${this.societeSelectionnee}`)
+        const comptesBancaires = await r.json()
+        comptesBancaires.forEach(c => { if (c.journal_comptable) set.add(c.journal_comptable) })
+      }
+      this.creationCompteJournauxDisponibles = [...set]
+    },
+
+    suggestionNumeroCreationCompte() {
+      const f = this.creationCompteForm
+      const norm = (f.intitule || '')
+        .normalize('NFD').replace(new RegExp('[̀-ͯ]', 'g'), '')
+        .toUpperCase().replace(/[^A-Z0-9]/g, '')
+      if (f.type === 'salarie') return 'P' + norm.slice(0, 11)
+      if (f.type === 'fournisseur' || f.type === 'client') {
+        const prefixe = f.type === 'fournisseur' ? 'F' : 'C'
+        const chiffreTva = { 20: '2', 10: '1', 5.5: '5', 0: '0' }[f.taux] ?? ''
+        return prefixe + chiffreTva + norm.slice(0, 10)
+      }
+      return f.numero_compte
+    },
+
+    actualiserSuggestionCreationCompte() {
+      if (['fournisseur', 'client', 'salarie'].includes(this.creationCompteForm.type)) {
+        this.creationCompteForm.numero_compte = this.suggestionNumeroCreationCompte()
+      }
+    },
+
+    async validerCreationCompte() {
+      this.creationCompteErreur = ''
+      const f = this.creationCompteForm
+      if (!f.type) { this.creationCompteErreur = 'Choisissez un type de compte'; return }
+      if (!f.numero_compte.trim() || !f.intitule.trim()) { this.creationCompteErreur = 'Numéro et intitulé requis'; return }
+      if (['fournisseur', 'client', 'salarie'].includes(f.type) && !f.compte_collectif_id) {
+        this.creationCompteErreur = 'Compte collectif requis pour un compte tiers'; return
+      }
+      this.creationCompteEnCours = true
+      const r = await fetch('/api/tiers', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          societe_id: this.societeSelectionnee, numero_compte: f.numero_compte.trim(), intitule: f.intitule.trim(),
+          type: f.type, compte_collectif_id: f.compte_collectif_id, journal: f.journal || null,
+        }),
+      })
+      const d = await r.json()
+      this.creationCompteEnCours = false
+      if (!r.ok) { this.creationCompteErreur = d.detail || 'Erreur'; return }
+      this.tiersSociete.push(d)
+      this.showCreationCompteModal = false
+      if (this.creationCompteCallback) this.creationCompteCallback(d.id)
+    },
+
+    async validerSociete() {
+      const r = await fetch(`/api/societes/${this.societeSelectionnee}/valider`, { method: 'POST' })
+      const d = await r.json()
+      if (!r.ok) { this.validationSocieteMessage = d.detail || 'Erreur'; this.showValidationErreurModal = true; return }
+      const idx = this.societes.findIndex(s => s.id === this.societeSelectionnee)
+      if (idx !== -1) this.societes[idx] = d
+    },
+
+    compteLabelById(id) {
+      const t = this.tiersSociete.find(x => x.id === id)
+      return t ? `${t.numero_compte} — ${t.intitule}` : ''
+    },
+
+    optionsComptesFacture(q) {
+      // Recherche minimum 3 caractères (évolution du 2026-08-21, demande Anis) — aucun résultat avant.
+      const motif = (q || '').trim().toLowerCase()
+      if (motif.length < 3) return []
+      let options = this.tiersSociete.filter(t => t.type === 'compte')
+      options = options.filter(t => t.intitule.toLowerCase().includes(motif) || t.numero_compte.toLowerCase().includes(motif))
+      return options.slice(0, 30)
+    },
+
+    // Sélecteur "N° compte TVA" (Sociétés & comptes) : mêmes comptes que optionsComptesFacture,
+    // restreints au préfixe 445 (plan comptable français, classe TVA) — demande Anis 2026-08-17,
+    // pour ne plus mélanger comptes de charges/produits et comptes de TVA dans ce picker précis.
+    optionsComptesTva(q) {
+      return this.optionsComptesFacture(q).filter(t => t.numero_compte.startsWith('445'))
+    },
+
+    async enregistrerFacture(statut) {
+      if (!this.factureSelectionnee) return
+      this.factureMsg = ''
+      const payload = { ...this.factureForm, date: this.factureForm.date || null, statut }
+      const r = await fetch(`/api/factures/${this.factureSelectionnee.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      })
+      if (!r.ok) { const e = await r.json(); this.factureErreur = true; this.factureMsg = e.detail || 'Erreur'; return }
+      const d = await r.json()
+      this.factureErreur = false
+      this.factureMsg = 'Enregistré.'
+      this.factureSelectionnee = d
+      await this.chargerFactures()
+      await this.chargerFacturesTraitees()
+      await this.chargerDashboard()
+    },
+
+    async supprimerFacture() {
+      if (!this.factureSelectionnee) return
+      if (!confirm(`Supprimer la facture ${this.factureSelectionnee.numero || '(sans numéro)'} ?`)) return
+      await fetch(`/api/factures/${this.factureSelectionnee.id}`, { method: 'DELETE' })
+      this.factureSelectionnee = null
+      await this.chargerFactures()
+      await this.chargerFacturesTraitees()
+      await this.chargerDashboard()
+    },
+
+    // ─── Helpers ─────────────────────────────────────────────────
+    fmt(v) {
+      if (v == null) return '—'
+      return new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
+    },
+    fmtDate(d) {
+      if (!d) return '—'
+      const [y, m, j] = d.split('-')
+      return `${j}/${m}/${y}`
+    },
+    nomMois(m) {
+      return ['', 'Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][m]
+    },
+  }
+}
+</script>
+</body>
+</html>

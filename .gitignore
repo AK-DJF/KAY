@@ -1,0 +1,6 @@
+app/.env
+app/.session_secret
+app/data.db
+__pycache__/
+*.pyc
+.venv/
