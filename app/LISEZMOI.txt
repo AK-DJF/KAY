@@ -1,23 +1,41 @@
 Kikou — Numérisation — Installation sur votre PC
 ===================================================
 
-1) Prérequis
-   - Installer Python 3.11 (ou 3.10/3.12) depuis https://www.python.org/downloads/
-     (Windows : cocher "Add python.exe to PATH" pendant l'installation)
+INSTALLATION RAPIDE (recommandé)
+---------------------------------
+1) Installer Python 3.11 (ou 3.10/3.12) depuis https://www.python.org/downloads/
+   IMPORTANT (Windows) : cocher la case "Add python.exe to PATH" pendant
+   l'installation, sinon le script ci-dessous ne trouvera pas Python.
 
 2) Dézipper cette archive n'importe où, par exemple :
    - Windows : C:\Kikou\app
    - Mac/Linux : ~/Kikou/app
 
-3) Ouvrir un terminal (Invite de commandes / PowerShell sur Windows, Terminal sur Mac/Linux)
-   et se placer dans le dossier "app" :
+3) Double-cliquer sur le script d'installation dans le dossier "app" :
+   - Windows : INSTALLER-WINDOWS.bat
+   - Mac/Linux : installer-mac-linux.command
+     (sur Mac, si un message de sécurité bloque le fichier : clic droit
+     dessus > "Ouvrir", puis confirmer "Ouvrir")
+
+   Ce script installe automatiquement les dépendances, démarre le serveur
+   et ouvre votre navigateur sur http://127.0.0.1:8000.
+
+4) Laissez la fenêtre noire (terminal) ouverte tant que vous utilisez
+   l'application. Pour arrêter le serveur : fermez la fenêtre ou Ctrl+C.
+
+INSTALLATION MANUELLE (si le script ne fonctionne pas)
+--------------------------------------------------------
+1) Installer Python comme ci-dessus.
+
+2) Ouvrir un terminal (Invite de commandes / PowerShell sur Windows, Terminal
+   sur Mac/Linux) et se placer dans le dossier "app" :
        cd chemin/vers/app
 
-4) Installer les dépendances :
+3) Installer les dépendances :
        pip install -r requirements.txt
    (sur Mac/Linux, utiliser "pip3" si "pip" n'est pas reconnu)
 
-5) Vérifier que le fichier .env est bien présent dans le dossier "app" (il contient déjà
+4) Vérifier que le fichier .env est bien présent dans le dossier "app" (il contient déjà
    une clé OpenRouter fonctionnelle). Si vous préférez utiliser votre propre clé,
    remplacez la valeur de OPENROUTER_API_KEY dans .env (clé créable sur
    https://openrouter.ai/keys). Sans clé valide, l'appli fonctionne quand même :
