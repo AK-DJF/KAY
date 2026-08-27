@@ -1,0 +1,43 @@
+Kikou — Numérisation — Installation sur votre PC
+===================================================
+
+1) Prérequis
+   - Installer Python 3.11 (ou 3.10/3.12) depuis https://www.python.org/downloads/
+     (Windows : cocher "Add python.exe to PATH" pendant l'installation)
+
+2) Dézipper cette archive n'importe où, par exemple :
+   - Windows : C:\Kikou\app
+   - Mac/Linux : ~/Kikou/app
+
+3) Ouvrir un terminal (Invite de commandes / PowerShell sur Windows, Terminal sur Mac/Linux)
+   et se placer dans le dossier "app" :
+       cd chemin/vers/app
+
+4) Installer les dépendances :
+       pip install -r requirements.txt
+   (sur Mac/Linux, utiliser "pip3" si "pip" n'est pas reconnu)
+
+5) Vérifier que le fichier .env est bien présent dans le dossier "app" (il contient déjà
+   une clé OpenRouter fonctionnelle). Si vous préférez utiliser votre propre clé,
+   remplacez la valeur de OPENROUTER_API_KEY dans .env (clé créable sur
+   https://openrouter.ai/keys). Sans clé valide, l'appli fonctionne quand même :
+   l'extraction de factures retombe automatiquement sur le moteur local (pdfplumber/OCR).
+
+   IMPORTANT SÉCURITÉ : ce fichier .env contient une clé API réelle. Ne le partagez pas,
+   ne le publiez pas sur un dépôt public (GitHub, etc.).
+
+6) Lancer le serveur :
+       python app.py
+   (sur Mac/Linux, "python3 app.py" si besoin)
+
+7) Ouvrir votre navigateur à l'adresse :
+       http://127.0.0.1:8000
+
+   Au tout premier lancement, la base de données "data.db" est créée automatiquement
+   (vide), et vous verrez l'écran de création du compte administrateur.
+
+8) Pour arrêter le serveur : retourner dans le terminal et faire Ctrl+C.
+
+Remarque : contrairement à l'environnement de test cloud utilisé pour valider cette
+archive, sur votre PC avec un accès Internet normal, le thème visuel marine/or
+s'affichera correctement (l'appli charge Tailwind CSS et Alpine.js depuis un CDN).
