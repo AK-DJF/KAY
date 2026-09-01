@@ -30,6 +30,7 @@ from typing import Optional
 import pdfplumber
 
 from .base import BaseParser, Transaction, regrouper_lignes_par_position
+from .ocr_utils import seuil_debit_credit
 
 RE_DATE_COLLEE = re.compile(r'^(\d{2}/\d{2})(\d{2}/\d{2})$')
 RE_MONTANT_FIN = re.compile(r'^\d+,\d{2}$')
@@ -104,12 +105,7 @@ class CIHBankParser(BaseParser):
         if not lignes_brutes:
             return []
 
-        positions_x = sorted(set(r["x0_montant"] for r in lignes_brutes))
-        seuil = positions_x[0] - 1
-        if len(positions_x) > 1:
-            ecarts = [(positions_x[i + 1] - positions_x[i], (positions_x[i] + positions_x[i + 1]) / 2)
-                      for i in range(len(positions_x) - 1)]
-            seuil = max(ecarts)[1]
+        seuil = seuil_debit_credit([r["x0_montant"] for r in lignes_brutes])
 
         transactions: list[Transaction] = []
         for r in lignes_brutes:
@@ -117,7 +113,9 @@ class CIHBankParser(BaseParser):
                 date_op = date(annee, int(r["mois_op"]), int(r["jour_op"]))
             except ValueError:
                 continue
-            est_credit = r["x0_montant"] > seuil
+            # Pas d'écart significatif détecté (relevé/page ne comportant qu'une seule
+            # colonne mouvementée) -> tout classer en débit, le cas le plus courant.
+            est_credit = seuil is not None and r["x0_montant"] > seuil
             transactions.append(Transaction(
                 date=date_op, libelle=r["libelle"],
                 debit=None if est_credit else r["montant"],
