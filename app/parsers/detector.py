@@ -7,15 +7,17 @@ from .qonto import QontoParser
 from .revolut import RevolutParser
 from .societe_generale import SocieteGeneraleParser
 from .bred import BREDParser
+from .credit_mutuel import CreditMutuelParser
 from .generic import GenericParser
 
 # Liste ordonnée des parsers spécifiques (du plus précis au plus générique).
-# Qonto, Revolut, Société Générale et BRED sont calibrés sur des relevés réels.
+# Qonto, Revolut, Société Générale, BRED et Crédit Mutuel sont calibrés sur des relevés réels.
 PARSERS_DISPONIBLES: list[BaseParser] = [
     QontoParser(),
     RevolutParser(),
     SocieteGeneraleParser(),
     BREDParser(),
+    CreditMutuelParser(),
     # Ajouter ici les futurs parsers dédiés au fur et à mesure des besoins.
     GenericParser(),  # toujours en dernier
 ]
