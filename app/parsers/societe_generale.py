@@ -35,6 +35,8 @@ class SocieteGeneraleParser(BaseParser):
         if "552120222" in texte_complet:
             return True
         texte = texte_complet.upper()
+        if "MAROC" in texte:
+            return False  # Société Générale Maroc — voir parsers/maroc.py
         return "SOCIETE GENERALE" in texte or "SOCIÉTÉ GÉNÉRALE" in texte
 
     def _montant(self, texte: str) -> float:

@@ -34,7 +34,7 @@ PATTERN_MONTANT = re.compile(
     r'|[+-]?\d+,\d{2}'                      # 35,57
     r'|[+-]?\d{1,3}(?:[ .]\d{3})+'          # 10.800 (sans décimales)
     r'|[+-]?\d+\.\d{2}'                     # 35.57
-    r'|[+-]?\d+)\s*(?:EUR|€)?',
+    r'|[+-]?\d+)\s*(?:EUR|€|MAD|DHS?)?',
     re.IGNORECASE,
 )
 
