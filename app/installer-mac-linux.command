@@ -2,7 +2,7 @@
 cd "$(dirname "$0")"
 
 echo "============================================"
-echo "  Kikou - Numerisation - Installation"
+echo "  Kwika - Numerisation - Installation"
 echo "============================================"
 echo
 

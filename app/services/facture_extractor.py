@@ -353,7 +353,7 @@ def extraire_facture_ia(chemin: Path) -> dict:
             headers={
                 "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                 "Content-Type": "application/json",
-                "X-Title": "Kikou - Numerisation factures",
+                "X-Title": "Kwika - Numerisation factures",
             },
             json={
                 "model": OPENROUTER_MODEL,

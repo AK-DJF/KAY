@@ -1,4 +1,4 @@
-Kikou — Numérisation — Installation sur votre PC
+Kwika — Numérisation — Installation sur votre PC
 ===================================================
 
 INSTALLATION RAPIDE (recommandé)
@@ -8,8 +8,8 @@ INSTALLATION RAPIDE (recommandé)
    l'installation, sinon le script ci-dessous ne trouvera pas Python.
 
 2) Dézipper cette archive n'importe où, par exemple :
-   - Windows : C:\Kikou\app
-   - Mac/Linux : ~/Kikou/app
+   - Windows : C:\Kwika\app
+   - Mac/Linux : ~/Kwika/app
 
 3) Double-cliquer sur le script d'installation dans le dossier "app" :
    - Windows : INSTALLER-WINDOWS.bat

@@ -61,7 +61,7 @@ async def lifespan(app):
     yield
 
 
-app = FastAPI(title="Kikou — Application de numérisation", docs_url="/api/docs", lifespan=lifespan)
+app = FastAPI(title="Kwika — Application de numérisation", docs_url="/api/docs", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, same_site="lax", https_only=False)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

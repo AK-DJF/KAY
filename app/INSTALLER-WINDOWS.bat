@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo ============================================
-echo   Kikou - Numerisation - Installation
+echo   Kwika - Numerisation - Installation
 echo ============================================
 echo.
 
