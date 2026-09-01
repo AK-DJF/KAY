@@ -17,3 +17,4 @@ def extraire_transactions(chemin_pdf: str) -> tuple[list[Transaction], str]:
     parser = detecter_parser(chemin_pdf)
     transactions = parser.parse(chemin_pdf)
     return transactions, parser.NOM_BANQUE
+

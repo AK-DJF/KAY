@@ -39,3 +39,4 @@ def detecter_parser(chemin_pdf: str) -> BaseParser:
 
     # Ne devrait jamais arriver car GenericParser accepte tout
     return GenericParser()
+

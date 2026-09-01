@@ -38,7 +38,7 @@ class User(Base):
     date_creation   = Column(DateTime, default=datetime.utcnow)
 
 
-# ── Sociétés et comptes bancaires (section 8) ───────────────────────────────────
+# ── Sociétés et comptes bancaires (section 8) ──────────────────────────────────
 
 class Societe(Base):
     __tablename__ = "societes"
@@ -88,7 +88,7 @@ class CompteBancaire(Base):
     releves  = relationship("Releve", back_populates="compte", cascade="all, delete-orphan")
 
 
-# ── Module A : relevés bancaires (section 4) ─────────────────────────────────────
+# ── Module A : relevés bancaires (section 4) ───────────────────────────────────
 
 class Releve(Base):
     """Un relevé mensuel (un fichier PDF = un mois = une ligne)."""
@@ -150,8 +150,7 @@ class Mouvement(Base):
 # ── Comptes tiers (clients/fournisseurs) et compte d'attente (évolution du 2026-08-03) ──
 
 class Tiers(Base):
-    """Compte tiers ou compte comptable ordinaire, importé depuis une liste Excel propre à chaque société,
-    ou créé à la volée depuis Relevés/Factures/Sociétés & comptes (évolution du 2026-08-21).
+    """Compte tiers ou compte comptable ordinaire, importé depuis une liste Excel propre à chaque société.
     type = client | fournisseur | salarie | compte (compte ordinaire de charge/produit, sans tiers)."""
     __tablename__ = "tiers"
     __table_args__ = (
@@ -165,19 +164,7 @@ class Tiers(Base):
     type           = Column(String, nullable=False)   # client | fournisseur | salarie | compte
     date_import    = Column(DateTime, default=datetime.utcnow)
 
-    # Compte collectif de rattachement (401 Fournisseurs, 411 Clients, 420 Personnel...) — évolution du
-    # 2026-08-21, demande Anis. Requis uniquement pour les comptes tiers (client/fournisseur/salarie),
-    # jamais pour un compte général (type "compte") ; purement classificatoire, aucune contrainte de
-    # préfixe numérique entre ce compte et le numéro du tiers créé dessous.
-    compte_collectif_id = Column(Integer, ForeignKey("comptes_collectifs.id"), nullable=True)
-
-    # Journal d'appartenance du compte — purement informatif (aucun impact sur la génération FEC,
-    # qui continue à déterminer son JournalCode par le contexte : achats/ventes de la société ou
-    # journal_comptable du compte bancaire). Évolution du 2026-08-21, demande Anis.
-    journal = Column(String, nullable=True)
-
-    societe          = relationship("Societe")
-    compte_collectif = relationship("ComptesCollectifs")
+    societe = relationship("Societe")
 
 
 class ParametresGlobaux(Base):
@@ -229,25 +216,6 @@ class ComptesRecurrents(Base):
     numero_compte  = Column(String, nullable=False)
     intitule       = Column(String, nullable=False)
     est_defaut     = Column(Boolean, default=False, nullable=False)   # un seul par société
-    date_creation  = Column(DateTime, default=datetime.utcnow)
-
-    societe = relationship("Societe")
-
-
-class ComptesCollectifs(Base):
-    """Comptes collectifs du plan comptable (401 Fournisseurs, 411 Clients, 420 Personnel...), propres
-    à chaque société — évolution du 2026-08-21, demande Anis. Simple liste de classification : un tiers
-    créé (fournisseur/client/salarié) doit être rattaché à l'un d'eux, sans qu'aucune contrainte de
-    préfixe numérique ne soit imposée entre le compte collectif et le numéro du tiers rattaché."""
-    __tablename__ = "comptes_collectifs"
-    __table_args__ = (
-        UniqueConstraint("societe_id", "numero_compte", name="uq_compte_collectif_societe_numero"),
-    )
-
-    id             = Column(Integer, primary_key=True, index=True)
-    societe_id     = Column(Integer, ForeignKey("societes.id"), nullable=False)
-    numero_compte  = Column(String, nullable=False)
-    intitule       = Column(String, nullable=False)
     date_creation  = Column(DateTime, default=datetime.utcnow)
 
     societe = relationship("Societe")
@@ -306,7 +274,7 @@ class Facture(Base):
     taux_tva         = relationship("TauxTVA")
 
 
-# ── Journal des anomalies (section 11.3) ─────────────────────────────────────────
+# ── Journal des anomalies (section 11.3) ───────────────────────────────────────
 
 class Anomalie(Base):
     __tablename__ = "anomalies"
@@ -417,17 +385,6 @@ def init_db():
             )
             conn.commit()
 
-        # Évolution du 2026-08-21 (demande Anis) : comptes collectifs (401/411/420...) par société,
-        # et rattachement collectif + journal d'appartenance sur chaque tiers (table comptes_collectifs
-        # créée automatiquement par Base.metadata.create_all ci-dessus).
-        cols_tiers = [r[1] for r in conn.execute(text("PRAGMA table_info(tiers)")).fetchall()]
-        if cols_tiers and "compte_collectif_id" not in cols_tiers:
-            conn.execute(text("ALTER TABLE tiers ADD COLUMN compte_collectif_id INTEGER"))
-            conn.commit()
-        if cols_tiers and "journal" not in cols_tiers:
-            conn.execute(text("ALTER TABLE tiers ADD COLUMN journal VARCHAR"))
-            conn.commit()
-
 
 @contextmanager
 def get_db():
@@ -440,3 +397,4 @@ def get_db():
         raise
     finally:
         db.close()
+

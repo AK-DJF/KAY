@@ -189,7 +189,7 @@ def _nom_tiers_detecte(mots: list[dict]) -> str | None:
         x_precedent = None
         for mot in ligne:
             if RE_DATE.fullmatch(mot["text"]) or re.fullmatch(r"\d[\d\/\-\.]*", mot["text"]):
-                break  # un jeton numérique/date marque la fin du bloc "nom"
+                break  # un token numérique/date marque la fin du bloc "nom"
             if x_precedent is not None and mot["x0"] - x_precedent > 25:
                 break  # grand espace horizontal = nouvelle colonne (ex. date à droite)
             bloc.append(mot["text"])
@@ -353,7 +353,7 @@ def extraire_facture_ia(chemin: Path) -> dict:
             headers={
                 "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                 "Content-Type": "application/json",
-                "X-Title": "Kwika - Numerisation factures",
+                "X-Title": "Kikou - Numerisation factures",
             },
             json={
                 "model": OPENROUTER_MODEL,
@@ -425,3 +425,4 @@ def extraire_facture(chemin: Path) -> dict:
         raise
     except Exception as e:
         raise ExtractionError(f"Impossible de lire le fichier : {e}")
+

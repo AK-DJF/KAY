@@ -7,7 +7,6 @@
 # blocage des doublons, authentification par session, dashboard, journal d'anomalies.
 
 import io
-import re
 import secrets
 import sys
 import tempfile
@@ -30,7 +29,7 @@ from starlette.middleware.sessions import SessionMiddleware
 sys.path.insert(0, str(Path(__file__).parent))
 
 from database import (
-    Anomalie, CompteBancaire, ComptesCollectifs, ComptesRecurrents, Facture, Mouvement, Releve,
+    Anomalie, CompteBancaire, ComptesRecurrents, Facture, Mouvement, Releve,
     Societe, TauxTVA, Tiers, User, get_db, init_db,
 )
 from auth import (
@@ -47,7 +46,7 @@ FACTURES_DIR.mkdir(exist_ok=True)
 
 TOLERANCE_SOLDE = 0.01  # tolérance d'arrondi pour le contrôle solde initial -> solde final
 
-# ── Secret de session (persistant sur disque, généré une seule fois) ──────────
+# ── Secret de session (persistant sur disque, généré une seule fois) ───────────
 
 SECRET_PATH = Path(__file__).parent / ".session_secret"
 if not SECRET_PATH.exists():
@@ -61,21 +60,21 @@ async def lifespan(app):
     yield
 
 
-app = FastAPI(title="Kwika — Application de numérisation", docs_url="/api/docs", lifespan=lifespan)
+app = FastAPI(title="Kwika Numérisation", docs_url="/api/docs", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, same_site="lax", https_only=False)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
-# ── Frontend ───────────────────────────────────────────────────────────────
+# ── Frontend ──────────────────────────────────────────────────────────────────
 
 @app.get("/")
 async def index(request: Request):
     return templates.TemplateResponse(request, "index.html")
 
 
-# ── Auth (section 7 du cadrage) ─────────────────────────────────────────────
+# ── Auth (section 7 du cadrage) ────────────────────────────────────────────────
 
 class LoginPayload(BaseModel):
     email: str
@@ -132,7 +131,7 @@ def auth_me(user: dict = Depends(utilisateur_courant)):
     return user
 
 
-# ── Sociétés (section 8) ─────────────────────────────────────────────────────
+# ── Sociétés (section 8) ───────────────────────────────────────────────────────
 
 class SocietePayload(BaseModel):
     nom: str
@@ -224,7 +223,7 @@ def supprimer_societe(societe_id: int, user: dict = Depends(utilisateur_courant)
     return {"ok": True}
 
 
-# ── Comptes bancaires (section 8) ────────────────────────────────────────────
+# ── Comptes bancaires (section 8) ──────────────────────────────────────────────
 
 class ComptePayload(BaseModel):
     societe_id: int
@@ -282,40 +281,6 @@ def creer_compte(payload: ComptePayload, user: dict = Depends(utilisateur_couran
         db.add(c)
         db.flush()
         return {"id": c.id}
-
-
-class CompteModificationPayload(BaseModel):
-    banque: str
-    libelle: str
-    devise: str = "EUR"
-    mois_debut_exercice: int = 1
-    numero_compte_bancaire: Optional[str] = None
-    numero_compte_comptable: Optional[str] = None
-    derniers_chiffres: Optional[str] = None
-    journal_comptable: Optional[str] = None
-
-
-@app.patch("/api/comptes/{compte_id}")
-def modifier_compte(compte_id: int, payload: CompteModificationPayload, user: dict = Depends(utilisateur_courant)):
-    """Modification d'un compte bancaire existant (évolution du 2026-08-21, demande Anis) — jusqu'ici
-    un compte ne pouvait être que créé ou supprimé, jamais corrigé après coup."""
-    if not (1 <= payload.mois_debut_exercice <= 12):
-        raise HTTPException(status_code=400, detail="Mois de début d'exercice invalide")
-    if payload.derniers_chiffres and len(payload.derniers_chiffres.strip()) != 4:
-        raise HTTPException(status_code=400, detail="Les 4 derniers chiffres doivent contenir exactement 4 caractères")
-    with get_db() as db:
-        c = db.query(CompteBancaire).filter(CompteBancaire.id == compte_id).first()
-        if not c:
-            raise HTTPException(status_code=404, detail="Compte introuvable")
-        c.banque = payload.banque.strip()
-        c.libelle = payload.libelle.strip()
-        c.devise = payload.devise
-        c.mois_debut_exercice = payload.mois_debut_exercice
-        c.numero_compte_bancaire = (payload.numero_compte_bancaire or "").strip() or None
-        c.numero_compte_comptable = (payload.numero_compte_comptable or "").strip() or None
-        c.derniers_chiffres = (payload.derniers_chiffres or "").strip() or None
-        c.journal_comptable = (payload.journal_comptable or "").strip() or None
-        return _compte_to_dict(c)
 
 
 @app.delete("/api/comptes/{compte_id}")
@@ -412,66 +377,6 @@ def supprimer_compte_recurrent(compte_id: int, user: dict = Depends(utilisateur_
     return {"ok": True}
 
 
-# ── Comptes collectifs (401 Fournisseurs, 411 Clients, 420 Personnel...), propres à chaque ──
-# société (évolution du 2026-08-21, demande Anis) : rattachement obligatoire de tout compte tiers
-# créé (client/fournisseur/salarié) ; simple classification, aucune contrainte de préfixe numérique
-# imposée entre le compte collectif et le numéro du tiers créé dessous.
-
-class CompteCollectifPayload(BaseModel):
-    societe_id: int
-    numero_compte: str
-    intitule: str
-
-
-def _compte_collectif_to_dict(c: ComptesCollectifs) -> dict:
-    return {
-        "id": c.id, "societe_id": c.societe_id,
-        "numero_compte": c.numero_compte, "intitule": c.intitule,
-    }
-
-
-@app.get("/api/comptes-collectifs")
-def get_comptes_collectifs(societe_id: int = Query(...), user: dict = Depends(utilisateur_courant)):
-    with get_db() as db:
-        comptes = (
-            db.query(ComptesCollectifs)
-            .filter(ComptesCollectifs.societe_id == societe_id)
-            .order_by(ComptesCollectifs.numero_compte)
-            .all()
-        )
-        return [_compte_collectif_to_dict(c) for c in comptes]
-
-
-@app.post("/api/comptes-collectifs")
-def creer_compte_collectif(payload: CompteCollectifPayload, user: dict = Depends(utilisateur_courant)):
-    numero = payload.numero_compte.strip()
-    intitule = payload.intitule.strip()
-    if not numero or not intitule:
-        raise HTTPException(status_code=400, detail="Numéro de compte et intitulé requis")
-    with get_db() as db:
-        if not db.query(Societe).filter(Societe.id == payload.societe_id).first():
-            raise HTTPException(status_code=404, detail="Société introuvable")
-        if db.query(ComptesCollectifs).filter(
-            ComptesCollectifs.societe_id == payload.societe_id, ComptesCollectifs.numero_compte == numero,
-        ).first():
-            raise HTTPException(status_code=409, detail="Ce compte collectif existe déjà pour cette société")
-        c = ComptesCollectifs(societe_id=payload.societe_id, numero_compte=numero, intitule=intitule)
-        db.add(c)
-        db.flush()
-        return _compte_collectif_to_dict(c)
-
-
-@app.delete("/api/comptes-collectifs/{compte_id}")
-def supprimer_compte_collectif(compte_id: int, user: dict = Depends(utilisateur_courant)):
-    with get_db() as db:
-        c = db.query(ComptesCollectifs).filter(ComptesCollectifs.id == compte_id).first()
-        if not c:
-            raise HTTPException(status_code=404, detail="Compte collectif introuvable")
-        db.query(Tiers).filter(Tiers.compte_collectif_id == compte_id).update({Tiers.compte_collectif_id: None})
-        db.delete(c)
-    return {"ok": True}
-
-
 # ── Taux de TVA et comptes associés, propres à chaque société (évolution du 2026-08-16, ──
 # demande Anis — remplace le catalogue global partagé + activation par société) ──────────
 
@@ -564,17 +469,10 @@ def get_tiers(
             motif = f"%{q.strip()}%"
             req = req.filter((Tiers.intitule.ilike(motif)) | (Tiers.numero_compte.ilike(motif)))
         tiers = req.order_by(Tiers.intitule).all()
-        return [_tiers_vers_dict(t) for t in tiers]
-
-
-def _tiers_vers_dict(t: Tiers) -> dict:
-    return {
-        "id": t.id, "numero_compte": t.numero_compte, "intitule": t.intitule, "type": t.type,
-        "compte_collectif_id": t.compte_collectif_id,
-        "compte_collectif_intitule": t.compte_collectif.intitule if t.compte_collectif else None,
-        "compte_collectif_numero": t.compte_collectif.numero_compte if t.compte_collectif else None,
-        "journal": t.journal,
-    }
+        return [
+            {"id": t.id, "numero_compte": t.numero_compte, "intitule": t.intitule, "type": t.type}
+            for t in tiers
+        ]
 
 
 class TiersPayload(BaseModel):
@@ -582,36 +480,13 @@ class TiersPayload(BaseModel):
     numero_compte: str
     intitule: str
     type: str  # client | fournisseur | salarie | compte
-    compte_collectif_id: Optional[int] = None
-    journal: Optional[str] = None
-
-
-# Méthodologie de numérotation des comptes tiers (évolution du 2026-08-20, confirmée le 2026-08-21 :
-# le numéro reste désormais saisi/modifiable à la main plutôt qu'auto-généré, mais doit toujours
-# respecter ce motif) : F/C + chiffre du taux de TVA (2/1/5/0 pour 20/10/5,5/0%) + initiales pour
-# fournisseur/client ; P + initiales pour le personnel. Aucune règle pour un compte général (type
-# "compte") — numéro entièrement libre, comme aujourd'hui.
-RE_NUMERO_FOURNISSEUR = re.compile(r"^F[0125]", re.IGNORECASE)
-RE_NUMERO_CLIENT = re.compile(r"^C[0125]", re.IGNORECASE)
-RE_NUMERO_SALARIE = re.compile(r"^P", re.IGNORECASE)
-
-
-def _valider_numero_tiers(type_: str, numero: str) -> bool:
-    if type_ == "fournisseur":
-        return bool(RE_NUMERO_FOURNISSEUR.match(numero))
-    if type_ == "client":
-        return bool(RE_NUMERO_CLIENT.match(numero))
-    if type_ == "salarie":
-        return bool(RE_NUMERO_SALARIE.match(numero))
-    return True  # "compte" : pas de règle imposée
 
 
 @app.post("/api/tiers")
 def creer_tiers(payload: TiersPayload, user: dict = Depends(utilisateur_courant)):
-    """Création unitaire d'un compte tiers ou général (évolution du 2026-08-16, étendue le 2026-08-21
-    avec compte collectif + journal) — jusqu'ici seul l'import Excel en masse existait ; utile pour
-    créer à la volée un fournisseur/client/compte absent de la liste, directement depuis Relevés,
-    Factures ou Sociétés & comptes."""
+    """Création unitaire d'un compte tiers (évolution du 2026-08-16, demande Anis) — jusqu'ici
+    seul l'import Excel en masse existait ; utile pour créer à la volée un fournisseur/client
+    absent de la liste, directement depuis le formulaire facture."""
     if payload.type not in ("client", "fournisseur", "salarie", "compte"):
         raise HTTPException(status_code=400, detail="Type invalide")
     numero = payload.numero_compte.strip()
@@ -620,38 +495,15 @@ def creer_tiers(payload: TiersPayload, user: dict = Depends(utilisateur_courant)
         raise HTTPException(status_code=400, detail="Numéro et intitulé requis")
     if any(c.isspace() for c in numero):
         raise HTTPException(status_code=400, detail="Le numéro de compte tiers ne doit contenir aucun espace")
-    if not _valider_numero_tiers(payload.type, numero):
-        attendu = {
-            "fournisseur": "F + chiffre du taux de TVA (2/1/5/0) + initiales, ex. F2ACME",
-            "client": "C + chiffre du taux de TVA (2/1/5/0) + initiales, ex. C2ACME",
-            "salarie": "P + initiales, ex. PJDUPONT",
-        }[payload.type]
-        raise HTTPException(status_code=400, detail=f"Numéro non conforme à la méthodologie — attendu : {attendu}")
-
     with get_db() as db:
         if not db.query(Societe).filter(Societe.id == payload.societe_id).first():
             raise HTTPException(status_code=404, detail="Société introuvable")
         if db.query(Tiers).filter(Tiers.societe_id == payload.societe_id, Tiers.numero_compte == numero).first():
             raise HTTPException(status_code=409, detail="Un compte avec ce numéro existe déjà pour cette société")
-
-        compte_collectif_id = payload.compte_collectif_id
-        if payload.type in ("client", "fournisseur", "salarie"):
-            if not compte_collectif_id:
-                raise HTTPException(status_code=400, detail="Compte collectif requis pour un compte tiers")
-            if not db.query(ComptesCollectifs).filter(
-                ComptesCollectifs.id == compte_collectif_id, ComptesCollectifs.societe_id == payload.societe_id,
-            ).first():
-                raise HTTPException(status_code=404, detail="Compte collectif introuvable pour cette société")
-        else:
-            compte_collectif_id = None  # pas de collectif pour un compte général
-
-        t = Tiers(
-            societe_id=payload.societe_id, numero_compte=numero, intitule=intitule, type=payload.type,
-            compte_collectif_id=compte_collectif_id, journal=(payload.journal or "").strip() or None,
-        )
+        t = Tiers(societe_id=payload.societe_id, numero_compte=numero, intitule=intitule, type=payload.type)
         db.add(t)
         db.flush()
-        return _tiers_vers_dict(t)
+        return {"id": t.id, "numero_compte": t.numero_compte, "intitule": t.intitule, "type": t.type}
 
 
 @app.post("/api/tiers/import")
@@ -756,7 +608,7 @@ def rattacher_contrepartie(mouvement_id: int, payload: RattachementContrepartieP
     return {"ok": True}
 
 
-# ── Relevés bancaires : upload + contrôle solde + doublons (section 4) ────────
+# ── Relevés bancaires : upload + contrôle solde + doublons (section 4) ─────────
 
 def _suggestion_solde_initial(db, compte_id: int, mois: int, annee: int) -> Optional[float]:
     """
@@ -1061,7 +913,7 @@ def export_releve_csv(releve_id: int, mouvement_ids: Optional[str] = Query(None)
     )
 
 
-# ── Export FEC (écriture à double entrée, évolution du 2026-08-03) ────────────
+# ── Export FEC (écriture à double entrée, évolution du 2026-08-03) ─────────────
 # Numérotation d'écriture (évolution du 2026-08-16) : un compteur par société
 # (Societe.prochain_numero_ecriture), partagé entre le FEC des relevés et celui des factures.
 
@@ -1073,7 +925,7 @@ def _charger_compte_recurrent_defaut(db, societe_id: int) -> tuple[str, str]:
         raise HTTPException(
             status_code=400,
             detail="Aucun compte récurrent par défaut configuré pour cette société — définissez-en un dans "
-            "Sociétés & comptes avant d'exporter le FEC.",
+            "Sociétés & comptes avant d'exporter.",
         )
     return c.numero_compte, c.intitule
 
@@ -1113,7 +965,7 @@ def export_fec_releve(releve_id: int, mouvement_ids: Optional[str] = Query(None)
         except FECGenerationError as e:
             raise HTTPException(status_code=400, detail=str(e))
         buf = exporter_fec_texte(lignes)
-        nom = f"FEC_{compte.libelle}_{releve.mois:02d}-{releve.annee}.txt".replace(" ", "-")
+        nom = f"Export_{compte.libelle}_{releve.mois:02d}-{releve.annee}.txt".replace(" ", "-")
         _marquer_exportes(db, mouvements)
         _persister_numero_ecriture(db, compte.societe_id, prochain)
 
@@ -1161,7 +1013,7 @@ def export_fec_exercice(compte_id: int, annee_exercice: int = Query(...), user: 
         except FECGenerationError as e:
             raise HTTPException(status_code=400, detail=str(e))
         buf = exporter_fec_texte(lignes)
-        nom = f"FEC_{compte.libelle}_exercice-{annee_exercice}.txt".replace(" ", "-")
+        nom = f"Export_{compte.libelle}_exercice-{annee_exercice}.txt".replace(" ", "-")
         _marquer_exportes(db, [mv for mv, _ in mouvements_avec_releve])
         _persister_numero_ecriture(db, compte.societe_id, prochain)
 
@@ -1172,7 +1024,7 @@ def export_fec_exercice(compte_id: int, annee_exercice: int = Query(...), user: 
     )
 
 
-# ── Dashboard (section 10) ─────────────────────────────────────────────────────
+# ── Dashboard (section 10) ──────────────────────────────────────────────────────
 
 @app.get("/api/dashboard")
 def get_dashboard(user: dict = Depends(utilisateur_courant)):
@@ -1215,7 +1067,7 @@ def get_dashboard(user: dict = Depends(utilisateur_courant)):
         }
 
 
-# ── Journal des anomalies (section 11.3) ─────────────────────────────────────────
+# ── Journal des anomalies (section 11.3) ───────────────────────────────────────
 
 class AnomaliePayload(BaseModel):
     ref_type: str = "general"
@@ -1260,7 +1112,7 @@ def resoudre_anomalie(anomalie_id: int, user: dict = Depends(utilisateur_courant
     return {"ok": True}
 
 
-# ── Module B : factures achats/ventes (section 5) ────────────────────────────────
+# ── Module B : factures achats/ventes (section 5) ──────────────────────────────
 # Lecture par extraction de texte + reconnaissance de motifs (pdfplumber, même outil
 # que le module relevés) — pas d'IA de vision, pas de clé API (décidé avec Anis le
 # 2026-08-08 : un fournisseur/client différent à chaque facture rend un calibrage par
@@ -1460,7 +1312,7 @@ def supprimer_facture(facture_id: int, user: dict = Depends(utilisateur_courant)
     return {"ok": True}
 
 
-# ── Export FEC des factures (évolution du 2026-08-16, demande Anis) ──────────────
+# ── Export FEC des factures (évolution du 2026-08-16, demande Anis) ────────────
 # Sans sélection explicite, exporte toutes les factures validées (statut=ok) de la société —
 # avec sélection (facture_ids), seulement celles-ci. Marque date_dernier_export sur les factures
 # incluses et consomme le compteur d'écriture partagé avec le FEC des relevés (Societe).
@@ -1506,7 +1358,7 @@ def export_fec_factures(
             raise HTTPException(status_code=400, detail=str(e))
 
         buf = exporter_fec_texte(lignes)
-        nom = f"FEC_factures_{societe.nom}_{datetime.utcnow().strftime('%Y%m%d')}.txt".replace(" ", "-")
+        nom = f"Export_factures_{societe.nom}_{datetime.utcnow().strftime('%Y%m%d')}.txt".replace(" ", "-")
         maintenant = datetime.utcnow()
         for f in factures:
             f.date_dernier_export = maintenant
@@ -1519,7 +1371,8 @@ def export_fec_factures(
     )
 
 
-# ── Entry point ─────────────────────────────────────────────────────────────
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="127.0.0.1", port=8003, reload=True)
+

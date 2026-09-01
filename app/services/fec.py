@@ -210,3 +210,4 @@ def exporter_fec_texte(lignes: list[dict]) -> io.StringIO:
         writer.writerow(ligne)
     buf.seek(0)
     return buf
+

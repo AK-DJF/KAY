@@ -10,18 +10,53 @@ from pathlib import Path
 from typing import Optional
 from .base import BaseParser, Transaction
 
-# Formats de date fréquents dans les relevés français
+# Formats de date fréquents dans les relevés français — ne capturent QUE la date (pas de
+# `\s+(.*)` de fin) : ces patterns doivent matcher aussi bien une cellule de tableau isolée
+# (juste la date, rien après) qu'une ligne de texte brut "date + reste" — un `\s+(.*)` de fin
+# empêchait le 1er cas de matcher, et dans le 2e cas absorbait tout le reste de la ligne dans
+# le match lui-même, faisant de `ligne[m.end():]` (le "reste" utilisé ensuite) une chaîne
+# vide à chaque fois. Bug trouvé le 2026-08-20 sur un relevé Crédit Mutuel (0 mouvement
+# extrait alors que le texte contenait bien des lignes "date + opération + montant").
 PATTERNS_DATE = [
-    re.compile(r'^(\d{2}/\d{2}/(\d{4}))\s+(.*)'),   # DD/MM/YYYY
-    re.compile(r'^(\d{2}/\d{2}/(\d{2}))\s+(.*)'),    # DD/MM/YY
-    re.compile(r'^(\d{2}/\d{2})\s+(.*)'),             # DD/MM (sans année)
-    re.compile(r'^(\d{4}-\d{2}-\d{2})\s+(.*)'),       # YYYY-MM-DD
+    re.compile(r'^(\d{2}/\d{2}/\d{4})'),      # DD/MM/YYYY
+    re.compile(r'^(\d{2}/\d{2}/\d{2})(?!\d)'),  # DD/MM/YY
+    re.compile(r'^(\d{2}/\d{2})(?!\d)'),        # DD/MM (sans année)
+    re.compile(r'^(\d{4}-\d{2}-\d{2})'),        # YYYY-MM-DD
 ]
 
+# Capture un nombre français quel que soit son séparateur de milliers (point ou espace) —
+# la normalisation exacte (quel séparateur est la virgule décimale) se fait dans
+# `_normaliser_montant`, pas ici : un regex à un seul type de séparateur toléré (comme
+# l'ancienne version) coupait à tort "10.800,00" en "10.80" + "0,00" (même bug trouvé le
+# 2026-08-20 sur le relevé Crédit Mutuel).
 PATTERN_MONTANT = re.compile(
-    r'([+-]?\s*[\d][\d\s]*[.,][\d]{2})\s*(?:EUR|€)?',
+    r'([+-]?\d{1,3}(?:[ .]\d{3})+,\d{2}'   # 10.800,00 / 1 234,56
+    r'|[+-]?\d+,\d{2}'                      # 35,57
+    r'|[+-]?\d{1,3}(?:[ .]\d{3})+'          # 10.800 (sans décimales)
+    r'|[+-]?\d+\.\d{2}'                     # 35.57
+    r'|[+-]?\d+)\s*(?:EUR|€)?',
     re.IGNORECASE,
 )
+
+
+def _normaliser_montant(texte: str) -> Optional[float]:
+    """Convertit '10.800,00', '1 234,56', '35,57', '35.57'... en float (dernier séparateur
+    rencontré = décimale, l'autre = groupement de milliers, retiré)."""
+    t = (texte or "").strip().replace(" ", "").replace(" ", "")
+    t = re.sub(r"[^\d,.\-]", "", t)
+    if not t:
+        return None
+    if "," in t and "." in t:
+        if t.rfind(",") > t.rfind("."):
+            t = t.replace(".", "").replace(",", ".")
+        else:
+            t = t.replace(",", "")
+    elif "," in t:
+        t = t.replace(",", ".")
+    try:
+        return float(t)
+    except ValueError:
+        return None
 
 PATTERN_PERIODE = re.compile(
     r'(\d{2}/\d{2}/(\d{4}))',
@@ -84,11 +119,9 @@ class GenericParser(BaseParser):
         for col in cols[2:]:
             m_montant = PATTERN_MONTANT.search(col)
             if m_montant:
-                valeur_str = m_montant.group(1).replace(' ', '').replace(',', '.')
-                try:
-                    montants.append(float(valeur_str))
-                except ValueError:
-                    pass
+                valeur = _normaliser_montant(m_montant.group(1))
+                if valeur is not None:
+                    montants.append(valeur)
 
         # Heuristique : 2 colonnes montant = débit + crédit, 1 = débit ou crédit selon le signe
         if len(montants) >= 2:
@@ -147,16 +180,16 @@ class GenericParser(BaseParser):
             if tx_date is None:
                 continue
 
-            # Extraire tous les montants de la ligne
+            # Extraire tous les montants de la ligne (findall renvoie des chaînes, pas des
+            # tuples : un seul groupe capturant dans PATTERN_MONTANT — indexer avec [0]
+            # dessus prenait par erreur le 1er caractère du montant, pas le montant entier).
             montants_trouves = PATTERN_MONTANT.findall(reste)
             if not montants_trouves:
                 continue
 
             # Le dernier montant trouvé est généralement le bon
-            valeur_str = montants_trouves[-1][0].replace(' ', '').replace(',', '.')
-            try:
-                valeur = float(valeur_str)
-            except ValueError:
+            valeur = _normaliser_montant(montants_trouves[-1])
+            if valeur is None:
                 continue
 
             libelle = PATTERN_MONTANT.sub("", reste).strip()
@@ -208,5 +241,6 @@ class GenericParser(BaseParser):
                 transactions = self._parser_via_texte(pdf, nom_fichier, annee)
 
         return transactions
+
 
 
