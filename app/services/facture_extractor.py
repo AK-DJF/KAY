@@ -201,11 +201,17 @@ def _nom_tiers_detecte(mots: list[dict]) -> str | None:
     return None
 
 
-def _construire_resultat(mots: list[dict], hauteur: float, texte: str) -> dict:
-    lignes = [l for l in texte.split("\n") if l.strip()]
+def _construire_resultat(mots: list[dict], hauteur: float, texte: str, texte_toutes_pages: str | None = None) -> dict:
+    """`mots`/`hauteur`/`texte` viennent de la 1ère page (en-tête : date, nom de
+    l'émetteur — des repérages par position, qui n'ont de sens que sur une seule page).
+    `texte_toutes_pages`, s'il est fourni, sert au repérage du numéro/des montants/du
+    sujet : sur une facture multi-pages, ces informations (notamment les totaux) sont
+    souvent en dernière page plutôt qu'en page 1 (évolution du 2026-09-01, facture réelle
+    de 8 pages non repérée en ne lisant que la 1ère)."""
+    lignes = [l for l in (texte_toutes_pages or texte).split("\n") if l.strip()]
     return {
         "date": _chercher_date(mots, hauteur),
-        "numero": _chercher_numero(texte),
+        "numero": _chercher_numero(texte_toutes_pages or texte),
         "montant_ht": _chercher_montant(lignes, MOTS_CLES_HT),
         "montant_tva": _chercher_montant(lignes, MOTS_CLES_TVA, exclure=EXCLUSIONS_MONTANT_TVA),
         "montant_ttc": _chercher_montant(lignes, MOTS_CLES_TTC),
@@ -225,7 +231,8 @@ def _lire_pdf(chemin: Path) -> dict:
             # Tout ce qui dépend de `page` (extract_words) doit rester dans le `with` :
             # les ressources pdfminer sous-jacentes sont libérées à la sortie du contexte.
             mots = page.extract_words() or []
-            return _construire_resultat(mots, page.height, texte)
+            texte_toutes_pages = "\n".join((p.extract_text() or "") for p in pdf.pages)
+            return _construire_resultat(mots, page.height, texte, texte_toutes_pages)
 
         # Pas de couche texte -> PDF scanné (image encapsulée dans le PDF, sans
         # OCR fait en amont). On rasterise la page en image et on retombe sur le
@@ -286,9 +293,11 @@ def _lire_image(chemin: Path) -> dict:
     return _resultat_par_ocr(chemin)
 
 
-PROMPT_IA = """Tu es un assistant d'extraction de données comptables. Analyse l'image de \
-cette facture (achat ou vente) et réponds UNIQUEMENT avec un objet JSON strict, sans \
-texte autour, ni bloc de code, avec exactement ces champs :
+PROMPT_IA = """Tu es un assistant d'extraction de données comptables. Analyse cette \
+facture (achat ou vente) et réponds UNIQUEMENT avec un objet JSON strict, sans texte \
+autour, ni bloc de code, avec exactement ces champs. S'il y a plusieurs images, ce sont \
+la 1ère et la dernière page d'une même facture (les pages intermédiaires, non fournies, \
+ne contiennent que des lignes de détail) — les totaux sont généralement en dernière page :
 
 {
   "date": "YYYY-MM-DD ou null",
@@ -304,21 +313,32 @@ Règles : les montants sont des nombres (point décimal, sans symbole monétaire
 Si une information est absente ou illisible, mets null — n'invente jamais une valeur."""
 
 
-def _page_en_image_png(chemin: Path) -> bytes:
-    """Convertit la 1ère page/l'image du fichier en PNG (bytes), pour l'envoyer à un
-    modèle de vision. Réutilise la même rasterisation que le repli OCR local pour un PDF."""
-    if chemin.suffix.lower() == ".pdf":
-        with pdfplumber.open(chemin) as pdf:
-            if not pdf.pages:
-                raise ExtractionError("PDF vide (aucune page)")
-            image = pdf.pages[0].to_image(resolution=200).original
-    else:
-        image = Image.open(chemin)
-        image.load()
-
+def _image_vers_png(image: Image.Image) -> bytes:
     buf = io.BytesIO()
     image.convert("RGB").save(buf, format="PNG")
     return buf.getvalue()
+
+
+def _pages_en_images_png(chemin: Path) -> list[bytes]:
+    """Convertit la/les page(s) utile(s) du fichier en PNG (bytes), pour les envoyer à un
+    modèle de vision. Réutilise la même rasterisation que le repli OCR local pour un PDF.
+    Sur une facture multi-pages, l'en-tête (date, émetteur, numéro) est en page 1 mais les
+    totaux sont souvent en dernière page (ex. facture réelle de 8 pages, beaucoup de
+    lignes de détail avant le total) — on envoie donc aussi la dernière page si elle
+    diffère de la première, plutôt que les pages intermédiaires (lignes de détail, pas
+    utiles aux champs recherchés)."""
+    if chemin.suffix.lower() != ".pdf":
+        image = Image.open(chemin)
+        image.load()
+        return [_image_vers_png(image)]
+
+    with pdfplumber.open(chemin) as pdf:
+        if not pdf.pages:
+            raise ExtractionError("PDF vide (aucune page)")
+        images = [pdf.pages[0].to_image(resolution=200).original]
+        if len(pdf.pages) > 1:
+            images.append(pdf.pages[-1].to_image(resolution=200).original)
+        return [_image_vers_png(img) for img in images]
 
 
 def _extraire_json_reponse(texte: str) -> dict:
@@ -344,8 +364,11 @@ def extraire_facture_ia(chemin: Path) -> dict:
 
     import httpx
 
-    png = _page_en_image_png(chemin)
-    data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+    pngs = _pages_en_images_png(chemin)
+    contenu = [{"type": "text", "text": PROMPT_IA}]
+    for png in pngs:
+        data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+        contenu.append({"type": "image_url", "image_url": {"url": data_url}})
 
     try:
         reponse = httpx.post(
@@ -353,17 +376,12 @@ def extraire_facture_ia(chemin: Path) -> dict:
             headers={
                 "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                 "Content-Type": "application/json",
-                "X-Title": "Kikou - Numerisation factures",
+                "X-Title": "Kwika - Numerisation factures",
             },
             json={
                 "model": OPENROUTER_MODEL,
                 "temperature": 0,
-                "messages": [
-                    {"role": "user", "content": [
-                        {"type": "text", "text": PROMPT_IA},
-                        {"type": "image_url", "image_url": {"url": data_url}},
-                    ]}
-                ],
+                "messages": [{"role": "user", "content": contenu}],
             },
             timeout=OPENROUTER_TIMEOUT,
         )
