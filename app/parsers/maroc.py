@@ -1,19 +1,12 @@
 # parsers/maroc.py
-# Parsers pour les banques marocaines — pas de relevé réel disponible pour calibrer un
-# repérage de colonnes dédié (comme pour BRED/Société Générale/Crédit Mutuel), donc ces
-# classes réutilisent l'extraction générique par tableaux/regex de GenericParser (déjà
-# compatible avec les dates DD/MM/YYYY et le format à virgule décimale utilisés au Maroc)
-# et n'ajoutent que la détection + le libellé de banque corrects. À affiner avec un vrai
-# relevé PDF de chaque banque dès qu'un exemple est disponible.
+# Parsers pour les banques marocaines sans exemple de relevé réel pour calibrer un
+# repérage de colonnes dédié — voir attijariwafa.py/bmce.py/saham.py pour les banques
+# calibrées sur de vrais relevés. En attendant un exemple, ces classes réutilisent
+# l'extraction générique par tableaux/regex de GenericParser (déjà compatible avec les
+# dates JJ/MM/AAAA et le format à virgule décimale utilisés au Maroc) et n'ajoutent que
+# la détection + le libellé de banque corrects.
 
 from .generic import GenericParser
-
-
-class AttijariwafaBankParser(GenericParser):
-    NOM_BANQUE = "Attijariwafa Bank"
-
-    def can_parse(self, texte_complet: str) -> bool:
-        return "ATTIJARIWAFA" in texte_complet.upper()
 
 
 class BanquePopulaireMarocParser(GenericParser):
@@ -26,14 +19,6 @@ class BanquePopulaireMarocParser(GenericParser):
         if "BANQUE CENTRALE POPULAIRE" in texte or "GROUPE BCP" in texte:
             return True
         return "BANQUE POPULAIRE" in texte and "MAROC" in texte
-
-
-class BMCEBankOfAfricaParser(GenericParser):
-    NOM_BANQUE = "BMCE Bank of Africa"
-
-    def can_parse(self, texte_complet: str) -> bool:
-        texte = texte_complet.upper()
-        return "BMCE" in texte or "BANK OF AFRICA" in texte
 
 
 class CIHBankParser(GenericParser):

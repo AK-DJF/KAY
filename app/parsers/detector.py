@@ -8,16 +8,19 @@ from .revolut import RevolutParser
 from .societe_generale import SocieteGeneraleParser
 from .bred import BREDParser
 from .credit_mutuel import CreditMutuelParser
+from .attijariwafa import AttijariwafaBankParser
+from .bmce import BMCEBankOfAfricaParser
+from .saham import SahamBankParser
 from .maroc import (
-    AttijariwafaBankParser, BanquePopulaireMarocParser, BMCEBankOfAfricaParser,
-    CIHBankParser, SocieteGeneraleMarocParser, CreditDuMarocParser,
+    BanquePopulaireMarocParser, CIHBankParser, SocieteGeneraleMarocParser, CreditDuMarocParser,
 )
 from .generic import GenericParser
 
 # Liste ordonnée des parsers spécifiques (du plus précis au plus générique).
-# Qonto, Revolut, Société Générale, BRED et Crédit Mutuel sont calibrés sur des relevés réels.
-# Les parsers marocains (voir maroc.py) détectent correctement la banque mais réutilisent
-# l'extraction générique faute d'exemple de relevé réel pour calibrer un repérage dédié.
+# Qonto, Revolut, Société Générale, BRED, Crédit Mutuel, Attijariwafa Bank, BMCE Bank of
+# Africa et Saham Bank sont calibrés sur des relevés réels. Les autres parsers marocains
+# (voir maroc.py) détectent correctement la banque mais réutilisent l'extraction générique
+# faute d'exemple de relevé réel pour calibrer un repérage dédié.
 PARSERS_DISPONIBLES: list[BaseParser] = [
     QontoParser(),
     RevolutParser(),
@@ -25,8 +28,9 @@ PARSERS_DISPONIBLES: list[BaseParser] = [
     BREDParser(),
     CreditMutuelParser(),
     AttijariwafaBankParser(),
-    BanquePopulaireMarocParser(),
     BMCEBankOfAfricaParser(),
+    SahamBankParser(),
+    BanquePopulaireMarocParser(),
     CIHBankParser(),
     SocieteGeneraleMarocParser(),
     CreditDuMarocParser(),
