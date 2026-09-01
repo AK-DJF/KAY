@@ -29,15 +29,15 @@ if [ $? -ne 0 ]; then
 fi
 
 echo
-echo "Demarrage du serveur sur http://127.0.0.1:8000 ..."
+echo "Demarrage du serveur sur http://127.0.0.1:8003 ..."
 echo "(Laissez cette fenetre ouverte tant que vous utilisez l'application)"
 echo
 
 ( sleep 2
   if command -v open >/dev/null 2>&1; then
-      open http://127.0.0.1:8000
+      open http://127.0.0.1:8003
   elif command -v xdg-open >/dev/null 2>&1; then
-      xdg-open http://127.0.0.1:8000
+      xdg-open http://127.0.0.1:8003
   fi
 ) &
 

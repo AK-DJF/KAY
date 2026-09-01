@@ -18,7 +18,7 @@ INSTALLATION RAPIDE (recommandé)
      dessus > "Ouvrir", puis confirmer "Ouvrir")
 
    Ce script installe automatiquement les dépendances, démarre le serveur
-   et ouvre votre navigateur sur http://127.0.0.1:8000.
+   et ouvre votre navigateur sur http://127.0.0.1:8003.
 
 4) Laissez la fenêtre noire (terminal) ouverte tant que vous utilisez
    l'application. Pour arrêter le serveur : fermez la fenêtre ou Ctrl+C.
@@ -49,7 +49,7 @@ INSTALLATION MANUELLE (si le script ne fonctionne pas)
    (sur Mac/Linux, "python3 app.py" si besoin)
 
 7) Ouvrir votre navigateur à l'adresse :
-       http://127.0.0.1:8000
+       http://127.0.0.1:8003
 
    Au tout premier lancement, la base de données "data.db" est créée automatiquement
    (vide), et vous verrez l'écran de création du compte administrateur.

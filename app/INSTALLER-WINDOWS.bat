@@ -28,11 +28,11 @@ if errorlevel 1 (
 )
 
 echo.
-echo Demarrage du serveur sur http://127.0.0.1:8000 ...
+echo Demarrage du serveur sur http://127.0.0.1:8003 ...
 echo (Laissez cette fenetre ouverte tant que vous utilisez l'application)
 echo.
 
-start "" http://127.0.0.1:8000
+start "" http://127.0.0.1:8003
 python app.py
 
 pause
