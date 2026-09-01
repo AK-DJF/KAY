@@ -95,14 +95,13 @@ def _extraire_json_reponse(texte: str) -> dict:
 
 
 def _appeler_modele_vision(images_png: list[bytes]) -> dict:
-    import httpx
-
     contenu = [{"type": "text", "text": PROMPT_IA}]
     for png in images_png:
         data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
         contenu.append({"type": "image_url", "image_url": {"url": data_url}})
 
     try:
+        import httpx
         reponse = httpx.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -135,7 +134,10 @@ def extraire_transactions_ia(chemin_pdf: str) -> tuple[list[Transaction], str]:
 
     chemin = Path(chemin_pdf)
     nom_fichier = chemin.name
-    images = _pages_en_images_png(chemin)
+    try:
+        images = _pages_en_images_png(chemin)
+    except Exception as e:
+        raise ExtractionIAError(f"Impossible de préparer les pages pour l'IA : {e}")
     if not images:
         raise ExtractionIAError("PDF vide (aucune page)")
     if len(images) > PAGES_MAX:
@@ -143,10 +145,18 @@ def extraire_transactions_ia(chemin_pdf: str) -> tuple[list[Transaction], str]:
 
     transactions: list[Transaction] = []
     nom_banque: Optional[str] = None
+    derniere_erreur: Optional[str] = None
 
     for i in range(0, len(images), PAGES_PAR_APPEL):
         lot = images[i:i + PAGES_PAR_APPEL]
-        brut = _appeler_modele_vision(lot)
+        try:
+            brut = _appeler_modele_vision(lot)
+        except ExtractionIAError as e:
+            # Un lot en échec (réseau, timeout, réponse inexploitable...) ne doit pas
+            # faire perdre les transactions déjà extraites des lots précédents — on
+            # continue avec les lots suivants plutôt que d'abandonner immédiatement.
+            derniere_erreur = str(e)
+            continue
 
         if nom_banque is None:
             b = brut.get("banque")
@@ -170,7 +180,7 @@ def extraire_transactions_ia(chemin_pdf: str) -> tuple[list[Transaction], str]:
             ))
 
     if not transactions:
-        raise ExtractionIAError("Aucune transaction reconnue par l'IA")
+        raise ExtractionIAError(derniere_erreur or "Aucune transaction reconnue par l'IA")
 
     banque_finale = nom_banque or "Banque (IA)"
     for tr in transactions:

@@ -20,13 +20,20 @@ def extraire_transactions(chemin_pdf: str) -> tuple[list[Transaction], str]:
     if not Path(chemin_pdf).exists():
         raise FileNotFoundError(f"Fichier introuvable : {chemin_pdf}")
 
+    erreur_ia: str | None = None
     if OPENROUTER_API_KEY:
         try:
             return extraire_transactions_ia(chemin_pdf)
-        except ExtractionIAError:
-            pass  # repli silencieux sur les parseurs locaux ci-dessous
+        except ExtractionIAError as e:
+            erreur_ia = str(e)  # repli sur les parseurs locaux ci-dessous, mais on garde
+            # la raison — utile si le repli échoue aussi (voir plus bas)
 
     parser = detecter_parser(chemin_pdf)
     transactions = parser.parse(chemin_pdf)
+    if not transactions and erreur_ia:
+        raise RuntimeError(
+            f"Aucun mouvement extrait. Extraction IA échouée ({erreur_ia}) et banque "
+            f"non reconnue par les parseurs locaux."
+        )
     return transactions, parser.NOM_BANQUE
 

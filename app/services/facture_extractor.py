@@ -362,15 +362,14 @@ def extraire_facture_ia(chemin: Path) -> dict:
     if not OPENROUTER_API_KEY:
         raise ExtractionError("OPENROUTER_API_KEY non configurée")
 
-    import httpx
-
-    pngs = _pages_en_images_png(chemin)
-    contenu = [{"type": "text", "text": PROMPT_IA}]
-    for png in pngs:
-        data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
-        contenu.append({"type": "image_url", "image_url": {"url": data_url}})
-
     try:
+        import httpx
+        pngs = _pages_en_images_png(chemin)
+        contenu = [{"type": "text", "text": PROMPT_IA}]
+        for png in pngs:
+            data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+            contenu.append({"type": "image_url", "image_url": {"url": data_url}})
+
         reponse = httpx.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -428,19 +427,29 @@ def extraire_facture(chemin: Path) -> dict:
             "ou les images (JPG, PNG…) — champs à compléter manuellement."
         )
 
+    erreur_ia = None
     if OPENROUTER_API_KEY:
         try:
             return extraire_facture_ia(chemin)
-        except ExtractionError:
-            pass  # repli silencieux sur le moteur local ci-dessous
+        except ExtractionError as e:
+            erreur_ia = str(e)  # repli sur le moteur local ci-dessous, mais on garde la
+            # raison — utile si le repli ne trouve rien non plus (voir plus bas)
 
     try:
         if suffixe == ".pdf":
-            return _lire_pdf(chemin)
+            resultat = _lire_pdf(chemin)
         else:
-            return _lire_image(chemin)
+            resultat = _lire_image(chemin)
     except ExtractionError:
         raise
     except Exception as e:
         raise ExtractionError(f"Impossible de lire le fichier : {e}")
+
+    champs_cles = ("date", "numero", "montant_ht", "montant_tva", "montant_ttc")
+    if erreur_ia and all(resultat.get(c) is None for c in champs_cles):
+        raise ExtractionError(
+            f"Extraction IA échouée ({erreur_ia}) et rien de reconnu par le moteur local — "
+            f"champs à compléter manuellement."
+        )
+    return resultat
 
