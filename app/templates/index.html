@@ -625,12 +625,22 @@
                       <div class="bg-zinc-100/70 rounded-lg p-2.5"><p class="text-zinc-400">Solde final calculé</p><p class="font-medium" :class="releveCourant?.statut==='ecart' ? 'text-rose-600' : 'text-emerald-600'" x-text="fmt(releveCourant?.solde_final_calcule)"></p></div>
                     </div>
 
+                    <div class="flex items-center gap-2 mb-2">
+                      <input type="text" x-model="filtreLibelleMouvement" placeholder="Filtrer par libellé…"
+                             class="flex-1 px-2.5 py-1.5 text-xs">
+                      <input type="text" x-model="filtreMontantMouvement" placeholder="Filtrer par montant…"
+                             class="w-40 px-2.5 py-1.5 text-xs">
+                      <button x-show="filtreLibelleMouvement || filtreMontantMouvement"
+                              @click="filtreLibelleMouvement=''; filtreMontantMouvement=''"
+                              class="text-[11px] text-zinc-500 hover:text-zinc-700 whitespace-nowrap">Réinitialiser</button>
+                    </div>
+
                     <div class="overflow-x-auto max-h-96 overflow-y-auto">
                       <table class="w-full text-xs">
                         <thead>
                           <tr class="border-b border-zinc-200 text-zinc-500 uppercase tracking-wider">
                             <th class="w-8 py-2">
-                              <input type="checkbox" :checked="mouvements.length > 0 && mouvementsSelectionnes.size === mouvements.length" @change="basculerToutSelectionner($event.target.checked)">
+                              <input type="checkbox" :checked="mouvementsFiltres().length > 0 && mouvementsFiltres().every(m => mouvementsSelectionnes.has(m.id))" @change="basculerToutSelectionner($event.target.checked)">
                             </th>
                             <th class="text-left py-2">Date</th><th class="text-left py-2">Libellé</th>
                             <th class="text-right py-2">Débit</th><th class="text-right py-2">Crédit</th>
@@ -641,7 +651,7 @@
                           </tr>
                         </thead>
                         <tbody>
-                          <template x-for="m in mouvements" :key="m.id">
+                          <template x-for="m in mouvementsFiltres()" :key="m.id">
                             <tr class="border-b border-zinc-200/70">
                               <td class="py-2">
                                 <input type="checkbox" :checked="mouvementsSelectionnes.has(m.id)" @change="basculerSelectionMouvement(m.id)">
@@ -1173,6 +1183,8 @@ function app() {
     releves: [],
     mouvements: [],
     mouvementsSelectionnes: new Set(),
+    filtreLibelleMouvement: '',
+    filtreMontantMouvement: '',
     anomalies: [],
     societeSelectionnee: null,
     compteSelectionne: null,
@@ -1580,6 +1592,8 @@ function app() {
     async selectionnerReleve(id) {
       this.releveSelectionne = id
       this.mouvementsSelectionnes = new Set()
+      this.filtreLibelleMouvement = ''
+      this.filtreMontantMouvement = ''
       const r = await fetch(`/api/releves/${id}/mouvements`)
       this.mouvements = await r.json()
     },
@@ -1596,8 +1610,30 @@ function app() {
       this.mouvementsSelectionnes = new Set(this.mouvementsSelectionnes)
     },
 
+    mouvementsFiltres() {
+      const libelle = this.filtreLibelleMouvement.trim().toLowerCase()
+      const montant = this.filtreMontantMouvement.trim().replace(',', '.')
+      return this.mouvements.filter(m => {
+        if (libelle && !(m.libelle || '').toLowerCase().includes(libelle)) return false
+        if (montant) {
+          const cible = parseFloat(montant)
+          const correspond = (v) => v != null && (
+            Number.isNaN(cible) ? String(v).includes(montant) : Math.abs(v - cible) < 0.01
+          )
+          if (!correspond(m.debit) && !correspond(m.credit)) return false
+        }
+        return true
+      })
+    },
+
     basculerToutSelectionner(coche) {
-      this.mouvementsSelectionnes = coche ? new Set(this.mouvements.map(m => m.id)) : new Set()
+      const ids = this.mouvementsFiltres().map(m => m.id)
+      if (!coche) {
+        const restants = new Set([...this.mouvementsSelectionnes].filter(id => !ids.includes(id)))
+        this.mouvementsSelectionnes = restants
+      } else {
+        this.mouvementsSelectionnes = new Set([...this.mouvementsSelectionnes, ...ids])
+      }
     },
 
     async supprimerReleve() {
