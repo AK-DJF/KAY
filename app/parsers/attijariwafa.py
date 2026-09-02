@@ -101,8 +101,18 @@ class AttijariwafaBankParser(BaseParser):
                 en_attente = None
             elif RE_JJ_MM.match(date_txt) and libelle_txt and not a_montant:
                 en_attente = (date_txt, libelle_txt)
-            elif not date_txt and not libelle_txt and a_montant and en_attente:
-                date_txt, libelle_txt = en_attente
+            elif not date_txt and not a_montant and libelle_txt and en_attente:
+                # Suite du libellé coupé au milieu d'un mot par le découpage en cellules
+                # (ex. "...PRELEVEMEN" puis "T" sur la ligne suivante) — pas encore le
+                # montant, on rallonge juste le libellé en attente.
+                date_pendante, libelle_pendant = en_attente
+                en_attente = (date_pendante, libelle_pendant + libelle_txt)
+            elif not date_txt and a_montant and en_attente:
+                # Cas normal (montant seul sur la ligne suivante) ou fin d'un libellé
+                # coupé sur 3 lignes (cas ci-dessus) — cette ligne peut encore porter le
+                # dernier fragment du libellé, à rattacher avant de construire.
+                date_txt, libelle_pendant = en_attente
+                libelle_txt = libelle_pendant + libelle_txt
                 tx = self._construire(date_txt, libelle_txt, valeur_txt, debit_txt, credit_txt, nom_fichier)
                 if tx:
                     transactions.append(tx)
