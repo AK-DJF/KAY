@@ -39,7 +39,7 @@ from auth import (
 from services.extractor import extraire_transactions
 from services.exporter import exporter_consolide_excel, exporter_csv, exporter_releve_excel
 from services.facture_extractor import EXTENSIONS_IMAGE, ExtractionError, extraire_facture
-from services.fec import FECGenerationError, exporter_fec_texte, generer_lignes_fec, generer_lignes_fec_factures
+from services.fec import FECGenerationError, exporter_fec_xlsx, generer_lignes_fec, generer_lignes_fec_factures
 
 FACTURES_DIR = Path(__file__).parent / "factures_files"
 FACTURES_DIR.mkdir(exist_ok=True)
@@ -964,14 +964,14 @@ def export_fec_releve(releve_id: int, mouvement_ids: Optional[str] = Query(None)
             )
         except FECGenerationError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        buf = exporter_fec_texte(lignes)
-        nom = f"Export_{compte.libelle}_{releve.mois:02d}-{releve.annee}.txt".replace(" ", "-")
+        buf = exporter_fec_xlsx(lignes)
+        nom = f"Export_{compte.libelle}_{releve.mois:02d}-{releve.annee}.xlsx".replace(" ", "-")
         _marquer_exportes(db, mouvements)
         _persister_numero_ecriture(db, compte.societe_id, prochain)
 
     return StreamingResponse(
         iter([buf.getvalue()]),
-        media_type="text/plain; charset=utf-8-sig",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nom}"'},
     )
 
@@ -1012,14 +1012,14 @@ def export_fec_exercice(compte_id: int, annee_exercice: int = Query(...), user: 
             )
         except FECGenerationError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        buf = exporter_fec_texte(lignes)
-        nom = f"Export_{compte.libelle}_exercice-{annee_exercice}.txt".replace(" ", "-")
+        buf = exporter_fec_xlsx(lignes)
+        nom = f"Export_{compte.libelle}_exercice-{annee_exercice}.xlsx".replace(" ", "-")
         _marquer_exportes(db, [mv for mv, _ in mouvements_avec_releve])
         _persister_numero_ecriture(db, compte.societe_id, prochain)
 
     return StreamingResponse(
         iter([buf.getvalue()]),
-        media_type="text/plain; charset=utf-8-sig",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nom}"'},
     )
 
@@ -1357,8 +1357,8 @@ def export_fec_factures(
         except FECGenerationError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        buf = exporter_fec_texte(lignes)
-        nom = f"Export_factures_{societe.nom}_{datetime.utcnow().strftime('%Y%m%d')}.txt".replace(" ", "-")
+        buf = exporter_fec_xlsx(lignes)
+        nom = f"Export_factures_{societe.nom}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx".replace(" ", "-")
         maintenant = datetime.utcnow()
         for f in factures:
             f.date_dernier_export = maintenant
@@ -1366,7 +1366,7 @@ def export_fec_factures(
 
     return StreamingResponse(
         iter([buf.getvalue()]),
-        media_type="text/plain; charset=utf-8-sig",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nom}"'},
     )
 

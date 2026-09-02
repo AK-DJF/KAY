@@ -1,8 +1,9 @@
 # services/fec.py
 # Génération de l'export FEC (Fichier des Écritures Comptables) pour le module relevés bancaires
 # ET pour le module factures (achats/ventes, évolution du 2026-08-16).
-# Format calé sur l'exemple fourni par Anis (tests/fec/exemple-fec_application-numerisation_2026-08-03.txt) :
-# fichier texte tabulé, une ligne banque + une ligne contrepartie par mouvement (écriture à double entrée).
+# Écriture à double entrée (une ligne banque + une ligne contrepartie par mouvement, ou plus avec
+# TVA) ; exportée en .xlsx dans un format simplifié (Jrl/Date Fact./Piéce/N° Compte/Nom client/
+# Débit/Crédit/N° Facture — évolution du 2026-09-02, calée sur le modèle FEC.xlsx fourni).
 #
 # Numérotation d'écriture (EcritureNum, évolution du 2026-08-16, demande Anis) : un compteur par
 # société (Societe.prochain_numero_ecriture), partagé entre le FEC des relevés et celui des
@@ -10,17 +11,13 @@
 # compteur ne repart jamais de zéro entre deux exports. C'est l'appelant (app.py) qui charge le
 # compteur avant génération et persiste la valeur retournée après.
 
-import csv
 import io
+from datetime import datetime
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
 
 from database import CompteBancaire, Facture, Mouvement, Releve
-
-ENTETES_FEC = [
-    "JournalCode", "JournalLib", "EcritureNum", "EcritureDate", "CompteNum", "CompteLib",
-    "CompAuxNum", "CompAuxLib", "PieceRef", "PieceDate", "EcritureLib",
-    "Debit", "Credit", "DebitDevise", "CreditDevise", "ValidDate",
-    "Montantdevise", "Idevise", "DateRglt", "ModeRglt", "NatOp", "IdClient",
-]
 
 
 def _montant(v):
@@ -201,13 +198,58 @@ def generer_lignes_fec_factures(
     return lignes, numero
 
 
-def exporter_fec_texte(lignes: list[dict]) -> io.StringIO:
-    """Écrit les lignes FEC au format texte tabulé (encodage utf-8-sig pour compatibilité Excel)."""
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=ENTETES_FEC, delimiter="\t", extrasaction="ignore")
-    writer.writeheader()
-    for ligne in lignes:
-        writer.writerow(ligne)
+def _defaire_montant(texte: str):
+    """Inverse de _montant() : '1234,56' -> 1234.56 (float), '' -> None."""
+    if not texte:
+        return None
+    return float(texte.replace(",", "."))
+
+
+ENTETES_FEC_SIMPLIFIE = ["Jrl", "Date Fact.", "Piéce", "N° Compte", "Nom client", "Débit", "Crédit", "N° Facture"]
+
+
+def exporter_fec_xlsx(lignes: list[dict]) -> io.BytesIO:
+    """Écrit les lignes FEC (mêmes lignes que exporter_fec_texte, écriture à double entrée)
+    au format Excel simplifié demandé par l'utilisateur (calé sur son modèle FEC.xlsx) :
+    une ligne par écriture élémentaire (banque, puis contrepartie(s)), colonnes réduites à
+    Jrl/Date Fact./Piéce/N° Compte/Nom client/Débit/Crédit/N° Facture — mêmes valeurs que
+    le FEC complet (JournalCode/EcritureDate/EcritureNum/CompteNum/CompteLib/Debit/Credit/
+    PieceRef), juste renommées et sans les colonnes annexes (journal libellé, comptes
+    auxiliaires, devise...) absentes de ce modèle."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "FEC"
+
+    for col, texte in enumerate(ENTETES_FEC_SIMPLIFIE, start=1):
+        c = ws.cell(row=1, column=col, value=texte)
+        c.font = Font(bold=True, color="FFFFFF", size=11)
+        c.fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 22
+
+    for i, ligne in enumerate(lignes, start=2):
+        date_fact = None
+        if ligne.get("EcritureDate"):
+            try:
+                date_fact = datetime.strptime(ligne["EcritureDate"], "%Y%m%d").date()
+            except ValueError:
+                date_fact = None
+        ws.cell(row=i, column=1, value=ligne.get("JournalCode") or "")
+        c_date = ws.cell(row=i, column=2, value=date_fact)
+        if date_fact:
+            c_date.number_format = "DD/MM/YYYY"
+        ws.cell(row=i, column=3, value=ligne.get("EcritureNum") or "")
+        ws.cell(row=i, column=4, value=ligne.get("CompteNum") or "")
+        ws.cell(row=i, column=5, value=ligne.get("CompteLib") or "")
+        ws.cell(row=i, column=6, value=_defaire_montant(ligne.get("Debit")))
+        ws.cell(row=i, column=7, value=_defaire_montant(ligne.get("Credit")))
+        ws.cell(row=i, column=8, value=ligne.get("PieceRef") or "")
+
+    for col, largeur in zip("ABCDEFGH", [8, 12, 8, 14, 30, 12, 12, 14]):
+        ws.column_dimensions[col].width = largeur
+
+    buf = io.BytesIO()
+    wb.save(buf)
     buf.seek(0)
     return buf
 
