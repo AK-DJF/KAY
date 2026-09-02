@@ -606,6 +606,23 @@
                       <p class="font-semibold text-zinc-900 text-sm" x-text="releveCourant ? `${nomMois(releveCourant.mois)} ${releveCourant.annee}` : ''"></p>
                       <div class="flex items-center gap-2">
                         <span x-show="mouvementsSelectionnes.size > 0" class="text-[11px] text-[#4c1d95]" x-text="`${mouvementsSelectionnes.size} sélectionné(s)`"></span>
+                        <div x-show="mouvementsSelectionnes.size > 0" class="relative" x-data="{ open:false, q:'' }">
+                          <button type="button" @click="open = !open"
+                                  class="px-2.5 py-1 bg-[#4c1d95] hover:bg-[#3b1673] text-white text-xs rounded-lg">Réaffecter à un compte</button>
+                          <div x-show="open" @click.outside="open=false" x-cloak
+                               class="absolute z-10 left-0 mt-1 w-64 bg-white border border-zinc-300 rounded-lg p-1.5 shadow-xl">
+                            <input type="text" x-model="q" @click.stop placeholder="Rechercher (3-4 lettres)…"
+                                   class="w-full px-2 py-1 text-xs mb-1">
+                            <div class="max-h-56 overflow-y-auto">
+                              <template x-for="c in optionsComptesPour(null, q)" :key="c.id">
+                                <button type="button" @click="reaffecterSelection(c.id); open=false"
+                                        class="w-full text-left px-2 py-1 text-xs rounded hover:bg-zinc-100 text-zinc-700"
+                                        x-text="`${c.numero_compte} — ${c.intitule}`"></button>
+                              </template>
+                              <p x-show="optionsComptesPour(null, q).length === 0" class="text-[10px] text-zinc-300 px-2 py-1">Aucun résultat</p>
+                            </div>
+                          </div>
+                        </div>
                         <button x-show="mouvementsSelectionnes.size > 0" @click="mouvementsSelectionnes = new Set()" class="text-[11px] text-zinc-500 hover:text-zinc-700">Désélectionner</button>
                         <button @click="exporter('excel')" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white text-xs rounded-lg">Excel</button>
                         <button @click="exporter('csv')" class="px-2.5 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded-lg">CSV</button>
@@ -1460,6 +1477,11 @@ function app() {
         m.taux_tva_id = null
         m.taux_tva = null
       }
+    },
+
+    async reaffecterSelection(compteId) {
+      const cibles = this.mouvements.filter(m => this.mouvementsSelectionnes.has(m.id))
+      await Promise.all(cibles.map(m => this.assignerContrepartie(m, compteId)))
     },
 
     async assignerTauxTva(m, tauxId) {
