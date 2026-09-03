@@ -8,9 +8,11 @@ if "%~1"=="" (
     pause
     exit /b
 )
-python diagnostic_cih.py "%~1"
+python diagnostic_cih.py "%~1" > resultat_diagnostic.txt 2>&1
+type resultat_diagnostic.txt
 echo.
 echo ============================================================
-echo Copiez TOUT le texte affiche ci-dessus et collez-le dans le chat.
+echo Resultat enregistre dans : %cd%\resultat_diagnostic.txt
+echo Envoyez ce fichier resultat_diagnostic.txt directement dans le chat.
 echo ============================================================
 pause
