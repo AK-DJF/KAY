@@ -69,7 +69,7 @@ templates = Jinja2Templates(directory="templates")
 # Affiché dans l'en-tête (voir templates/index.html) pour vérifier en un coup d'œil,
 # en cas de problème signalé, si l'installation testée est bien à jour — à incrémenter
 # à chaque changement notable poussé sur le dépôt (évolution du 2026-09-03).
-VERSION_APP = "2026.09.03-1"
+VERSION_APP = "2026.09.03-2"
 
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
