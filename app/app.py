@@ -66,12 +66,17 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, same_site="lax", ht
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+# Affiché dans l'en-tête (voir templates/index.html) pour vérifier en un coup d'œil,
+# en cas de problème signalé, si l'installation testée est bien à jour — à incrémenter
+# à chaque changement notable poussé sur le dépôt (évolution du 2026-09-03).
+VERSION_APP = "2026.09.03-1"
+
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 
 @app.get("/")
 async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse(request, "index.html", {"VERSION_APP": VERSION_APP})
 
 
 # ── Auth (section 7 du cadrage) ────────────────────────────────────────────────
