@@ -52,8 +52,15 @@ class CIHBankParser(BaseParser):
     NOM_BANQUE = "CIH Bank"
 
     def can_parse(self, texte_complet: str) -> bool:
-        texte = texte_complet.upper()
-        return "CIH BANK" in texte or ("C.I.H" in texte and "MAROC" in texte)
+        # Insensible aux espaces insérés par l'extraction de texte (variable selon la
+        # version de la bibliothèque sous-jacente) — "C.I.H" ou "CIH BANK" peuvent être
+        # rendus avec des espacements différents suivant l'environnement (ex. "C. I. H").
+        sans_espaces = re.sub(r'\s+', '', texte_complet.upper())
+        return (
+            "CIHBANK" in sans_espaces
+            or "CIH.CO.MA" in sans_espaces
+            or ("C.I.H" in sans_espaces and "MAROC" in sans_espaces)
+        )
 
     def _annee(self, pdf) -> int:
         for page in pdf.pages[:1]:
