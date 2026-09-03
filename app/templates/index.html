@@ -5,11 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kwika Numérisation</title>
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = { darkMode: 'class', theme: { extend: {} } }
-  </script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <!-- Tailwind CSS et Alpine.js servis localement (static/) plutôt que par CDN — l'appli
+       tourne en local sur le PC de l'utilisateur, sans dépendre d'un accès internet non
+       bloqué à un CDN externe pour fonctionner (évolution du 2026-09-03 : un pare-feu/
+       réseau bloquant les CDN rendait l'appli entièrement inerte, aucun clic ne répondait,
+       Alpine.js ne s'étant jamais chargé). static/css/tailwind.min.css est pré-compilé à
+       partir des classes utilisées dans ce fichier (npx tailwindcss -i input.css -o
+       static/css/tailwind.min.css --minify --content templates/index.html) — à regénérer
+       de la même façon si de nouvelles classes Tailwind sont ajoutées au template. -->
+  <link rel="stylesheet" href="/static/css/tailwind.min.css">
+  <script defer src="/static/js/alpine.min.js"></script>
 
   <style>
     body {
