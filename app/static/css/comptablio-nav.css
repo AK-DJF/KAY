@@ -1,0 +1,47 @@
+/* Bandeau de navigation partagé "Comptablio" — copié à l'identique dans les
+   3 applications. Classes namespacées .comptablio-nav* pour ne jamais entrer
+   en collision avec le CSS propre à chaque application. */
+
+.comptablio-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 20px;
+  background: #18181b;
+  border-bottom: 1px solid #3f3f46;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.comptablio-nav__home {
+  color: #fafafa;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.comptablio-nav__home:hover {
+  text-decoration: underline;
+}
+
+.comptablio-nav__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.comptablio-nav__links a {
+  color: #d4d4d8;
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.comptablio-nav__links a:hover {
+  color: #fafafa;
+  background: rgba(255, 255, 255, 0.08);
+}

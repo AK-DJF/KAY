@@ -85,3 +85,4 @@ def regrouper_lignes_par_position(words: list[dict], seuil: float = 2.0) -> list
         lignes.append(sorted(ligne_courante, key=lambda w: w["x0"]))
 
     return lignes
+

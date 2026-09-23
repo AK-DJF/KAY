@@ -85,3 +85,4 @@ class BREDParser(BaseParser):
                     ))
 
         return transactions
+

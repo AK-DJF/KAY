@@ -118,3 +118,4 @@ class RevolutParser(BaseParser):
             ))
 
         return transactions
+

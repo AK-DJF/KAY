@@ -12,8 +12,16 @@
 
 import csv
 import io
+from datetime import datetime
 
 from database import CompteBancaire, Facture, Mouvement, Releve
+
+# Colonnes attendues par le logiciel marocain "Khabir" pour l'import d'écritures (évolution
+# du 2026-09-22, demande utilisateur) — calées sur le modèle fourni (fec khabir.xls), qui ne
+# contenait que l'en-tête, aucune ligne d'exemple. Réutilise les mêmes lignes ENTETES_FEC
+# (écriture à double entrée) déjà construites par generer_lignes_fec / generer_lignes_fec_factures,
+# projetées sur ce sous-ensemble de colonnes.
+ENTETES_KHABIR = ["Jrl", "Date Fact.", "Pièce", "N° Compte", "Nom client", "Débit", "Crédit", "N° Facture"]
 
 ENTETES_FEC = [
     "JournalCode", "JournalLib", "EcritureNum", "EcritureDate", "CompteNum", "CompteLib",
@@ -210,3 +218,55 @@ def exporter_fec_texte(lignes: list[dict]) -> io.StringIO:
         writer.writerow(ligne)
     buf.seek(0)
     return buf
+
+
+def _texte_vers_nombre(texte: str):
+    """Inverse de _montant : '1 234,56' (ou '') -> float (ou None) pour une cellule Excel."""
+    if not texte:
+        return None
+    return float(texte.replace(",", "."))
+
+
+def _texte_vers_date(texte: str):
+    """'20260803' -> date(2026, 8, 3), ou None si vide/invalide (cellule Excel formatée date)."""
+    if not texte:
+        return None
+    try:
+        return datetime.strptime(texte, "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def exporter_khabir_xlsx(lignes: list[dict]) -> io.BytesIO:
+    """Projette les lignes FEC (écriture à double entrée) sur les colonnes du logiciel Khabir
+    et écrit un classeur .xlsx (Débit/Crédit en nombres, Date Fact. en date Excel).
+    "Nom client" reprend le libellé du mouvement (EcritureLib) — identique sur les deux lignes
+    d'une même écriture, plutôt que le nom du compte (qui diffère entre la ligne banque et la
+    ligne contrepartie) — demande utilisateur du 2026-09-22 : mêmes libellés sur le FEC exporté."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Feuil1"
+    ws.append(ENTETES_KHABIR)
+    for ligne in lignes:
+        ws.append([
+            ligne.get("JournalCode", ""),
+            _texte_vers_date(ligne.get("PieceDate", "")),
+            ligne.get("PieceRef", ""),
+            ligne.get("CompteNum", ""),
+            ligne.get("EcritureLib", ""),
+            _texte_vers_nombre(ligne.get("Debit", "")),
+            _texte_vers_nombre(ligne.get("Credit", "")),
+            ligne.get("PieceRef", ""),
+        ])
+    for col in ws.iter_cols(min_col=2, max_col=2, min_row=2):
+        for cell in col:
+            if cell.value is not None:
+                cell.number_format = "DD/MM/YYYY"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+

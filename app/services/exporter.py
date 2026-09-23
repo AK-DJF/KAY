@@ -184,3 +184,4 @@ def exporter_csv(mouvements: list[Mouvement]) -> io.StringIO:
         ])
     buf.seek(0)
     return buf
+

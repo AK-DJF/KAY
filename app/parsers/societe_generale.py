@@ -91,3 +91,4 @@ class SocieteGeneraleParser(BaseParser):
                     ))
 
         return transactions
+

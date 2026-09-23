@@ -41,3 +41,4 @@ def utilisateur_courant(request: Request) -> dict:
 def exiger_admin(user: dict) -> None:
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+

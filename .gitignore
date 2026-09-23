@@ -4,3 +4,6 @@ app/data.db
 __pycache__/
 *.pyc
 .venv/
+app/data.db.backup-*
+app/factures_files/*
+!app/factures_files/.gitkeep
