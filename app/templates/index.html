@@ -1118,6 +1118,11 @@
           <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Fichier PDF</label>
           <input type="file" accept=".pdf" @change="detecterSoldesFichier($event.target.files[0])" required class="w-full mt-1 text-xs">
         </div>
+        <label class="flex items-start gap-2 text-xs text-zinc-600">
+          <input type="checkbox" x-model="uploadForm.forcer_ia" class="mt-0.5">
+          <span>Numériser avec l'IA (clé API) — recommandé pour les relevés scannés.
+            <span class="block text-[10px] text-zinc-400">Sinon, l'IA prend le relais automatiquement si la lecture locale ne retrouve pas le solde final.</span></span>
+        </label>
 
         <p x-show="uploadError" class="text-xs text-rose-600" x-text="uploadError"></p>
 
@@ -1279,7 +1284,7 @@ function app() {
     uploading: false,
     uploadError: '',
     uploadConflit: '',
-    uploadForm: { mois: new Date().getMonth() + 1, annee: new Date().getFullYear(), solde_initial: null, solde_final_attendu: null, file: null },
+    uploadForm: { mois: new Date().getMonth() + 1, annee: new Date().getFullYear(), solde_initial: null, solde_final_attendu: null, file: null, forcer_ia: false },
     soldeInitialVerrouille: false,
     detectionSoldeEnCours: false,
     soldeFinalDetecteParIA: false,
@@ -1769,6 +1774,7 @@ function app() {
       fd.append('solde_initial', this.uploadForm.solde_initial)
       fd.append('solde_final_attendu', this.uploadForm.solde_final_attendu)
       fd.append('force', force ? 'true' : 'false')
+      fd.append('moteur', this.uploadForm.forcer_ia ? 'ia' : 'auto')
       fd.append('file', this.uploadForm.file)
 
       try {
@@ -1782,7 +1788,7 @@ function app() {
         await this.chargerReleves()
         await this.selectionnerReleve(d.releve_id)
         await this.chargerDashboard()
-        if (d.alerte) alert(`⚠ Écart de solde détecté : calculé ${d.solde_final_calcule} vs attendu ${d.solde_final_attendu}.\nÀ réviser avant de considérer ce relevé comme validé.`)
+        if (d.alerte) alert(`⚠ Écart de solde détecté : calculé ${d.solde_final_calcule} vs attendu ${d.solde_final_attendu}.\nLecture : ${d.banque_detectee}.\nÀ réviser avant de considérer ce relevé comme validé.`)
       } catch(e) {
         this.uploadError = 'Erreur réseau'
       }

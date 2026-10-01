@@ -208,23 +208,38 @@ def detecter_soldes_ia(chemin_pdf: str) -> dict:
         return {"solde_initial": None, "solde_final": None}
 
 
-def extraire_transactions(chemin_pdf: str) -> tuple[list[Transaction], str]:
+def _ecart(transactions: list[Transaction], solde_initial, solde_final) -> float | None:
+    if solde_initial is None or solde_final is None:
+        return None
+    total_debit = sum(t.debit or 0.0 for t in transactions)
+    total_credit = sum(t.credit or 0.0 for t in transactions)
+    return abs(round(solde_initial + total_credit - total_debit - solde_final, 2))
+
+
+def extraire_transactions(
+    chemin_pdf: str,
+    moteur: str = "auto",
+    solde_initial: float | None = None,
+    solde_final: float | None = None,
+    tolerance: float = 0.01,
+) -> tuple[list[Transaction], str]:
     """
     Extrait les transactions d'un PDF de relevé bancaire.
-    Retourne (transactions, nom_banque). Essaie d'abord les parseurs locaux dédiés par
-    banque (gratuits, basés sur le texte réel du PDF — plus fiables que la vision par IA
-    quand le format est reconnu) ; si aucun mouvement n'est trouvé (PDF scanné sans texte,
-    format non reconnu même par le parseur générique), retombe sur l'IA de vision
-    (OpenRouter) si une clé est configurée.
+    Retourne (transactions, nom_banque).
+
+    moteur = "auto" : parseurs locaux d'abord (gratuits, fiables sur les PDF texte) ; l'IA de
+      vision (OpenRouter) prend le relais si aucun mouvement n'est trouvé OU si les soldes
+      fournis ne se rapprochent pas (cas typique des relevés scannés lus partiellement ou de
+      travers par les parseurs locaux). On garde alors le résultat dont l'écart est le plus faible.
+    moteur = "ia" : numérisation directe par l'IA (choix explicite de l'utilisateur) ; repli
+      sur les parseurs locaux seulement si l'IA échoue ou ne renvoie rien.
     """
     if not Path(chemin_pdf).exists():
         raise FileNotFoundError(f"Fichier introuvable : {chemin_pdf}")
 
-    parser = detecter_parser(chemin_pdf)
-    transactions = parser.parse(chemin_pdf)
-    banque = parser.NOM_BANQUE
-
-    if not transactions and OPENROUTER_API_KEY:
+    if moteur == "ia":
+        if not OPENROUTER_API_KEY:
+            raise RuntimeError("Clé API OpenRouter absente : renseignez OPENROUTER_API_KEY dans le fichier .env")
         try:
             transactions_ia = extraire_transactions_ia(chemin_pdf)
         except Exception:
@@ -232,4 +247,27 @@ def extraire_transactions(chemin_pdf: str) -> tuple[list[Transaction], str]:
         if transactions_ia:
             return transactions_ia, "IA (vision)"
 
+    parser = detecter_parser(chemin_pdf)
+    transactions = parser.parse(chemin_pdf)
+    banque = parser.NOM_BANQUE
+
+    if moteur == "ia" or not OPENROUTER_API_KEY:
+        return transactions, banque
+
+    ecart_local = _ecart(transactions, solde_initial, solde_final)
+    if transactions and (ecart_local is None or ecart_local <= tolerance):
+        return transactions, banque
+
+    try:
+        transactions_ia = extraire_transactions_ia(chemin_pdf)
+    except Exception:
+        transactions_ia = []
+    if not transactions_ia:
+        return transactions, banque
+    if not transactions:
+        return transactions_ia, "IA (vision)"
+
+    ecart_ia = _ecart(transactions_ia, solde_initial, solde_final)
+    if ecart_ia is not None and ecart_ia < ecart_local:
+        return transactions_ia, "IA (vision)"
     return transactions, banque

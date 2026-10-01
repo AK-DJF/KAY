@@ -670,9 +670,12 @@ async def upload_releve(
     solde_final_attendu: float = Form(...),
     solde_initial: Optional[float] = Form(None),
     force: bool = Form(False),
+    moteur: str = Form("auto"),
     file: UploadFile = File(...),
     user: dict = Depends(utilisateur_courant),
 ):
+    if moteur not in ("auto", "ia"):
+        raise HTTPException(status_code=400, detail="Moteur d'extraction invalide")
     if not (1 <= mois <= 12):
         raise HTTPException(status_code=400, detail="Mois invalide")
     if not file.filename.lower().endswith(".pdf"):
@@ -714,7 +717,10 @@ async def upload_releve(
         chemin_tmp = tmp.name
 
     try:
-        transactions, banque_detectee = extraire_transactions(chemin_tmp)
+        transactions, banque_detectee = extraire_transactions(
+            chemin_tmp, moteur=moteur, solde_initial=solde_depart,
+            solde_final=solde_final_attendu, tolerance=TOLERANCE_SOLDE,
+        )
     except Exception as e:
         Path(chemin_tmp).unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail=f"Échec de l'extraction : {e}")
