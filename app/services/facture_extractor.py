@@ -54,7 +54,7 @@ except ImportError:
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "").strip()
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "mistralai/mistral-small-2603").strip()
-OPENROUTER_TIMEOUT = float(os.environ.get("OPENROUTER_TIMEOUT", "60"))
+OPENROUTER_TIMEOUT = float(os.environ.get("OPENROUTER_TIMEOUT", "120"))
 
 MOTS_CLES_NUMERO = r"(?:facture|invoice|r[ée]f[ée]rence|ref)\.?[ \t]*n?[o°]?\.?[ \t]*[:#]?[ \t]*"
 # Le jeton capturé doit contenir au moins un chiffre (lookahead) — un numéro de facture réel en a

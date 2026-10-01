@@ -44,7 +44,51 @@ Règles strictes :
 - Les montants sont des nombres (point décimal, sans espace ni symbole monétaire).
 - Ignore les lignes d'en-tête, de solde initial/final, de totaux récapitulatifs, de mentions
   légales. Si cette page ne contient aucun mouvement, réponds avec un array vide : [].
-- N'invente jamais une ligne absente de l'image, et ne duplique jamais une ligne déjà extraite."""
+- N'invente jamais une ligne absente de l'image, et ne duplique jamais une ligne déjà extraite.
+- Ignore les annotations manuscrites (coches, flèches, chiffres écrits à la main) : seuls les
+  montants imprimés comptent.
+- Sur les relevés scannés, les montants peuvent être légèrement décalés en hauteur par rapport
+  aux libellés : rattache chaque montant imprimé à la ligne de mouvement la plus proche, en
+  respectant l'ordre des lignes, et classe-le selon sa COLONNE (débit ou crédit), jamais selon
+  le libellé.
+- Si l'année n'est pas dans la colonne date, prends-la dans la colonne date de valeur ou dans
+  la période du relevé."""
+
+
+def _montant(valeur) -> float | None:
+    """Convertit un montant renvoyé par l'IA (nombre, "15039.89", "15 039,89", "1.234,50"…)."""
+    if valeur in ("", "null", None):
+        return None
+    if isinstance(valeur, (int, float)):
+        return abs(float(valeur)) or None
+    texte = str(valeur).replace("\u00a0", "").replace("\u202f", "").replace(" ", "")
+    texte = texte.replace("DH", "").replace("MAD", "").replace("€", "").strip("+-")
+    if "," in texte and "." in texte:
+        texte = texte.replace(".", "").replace(",", ".") if texte.rfind(",") > texte.rfind(".") else texte.replace(",", "")
+    elif "," in texte:
+        texte = texte.replace(",", ".")
+    try:
+        return abs(float(texte)) or None
+    except ValueError:
+        return None
+
+
+def _date(valeur) -> date | None:
+    texte = str(valeur or "").strip()
+    try:
+        return date.fromisoformat(texte[:10])
+    except ValueError:
+        pass
+    morceaux = [m for m in texte.replace("/", " ").replace("-", " ").replace(".", " ").split() if m.isdigit()]
+    if len(morceaux) == 3:
+        jour, mois, annee = (int(m) for m in morceaux)
+        if annee < 100:
+            annee += 2000
+        try:
+            return date(annee, mois, jour)
+        except ValueError:
+            return None
+    return None
 
 
 def _extraire_json_liste(texte: str) -> list:
@@ -100,28 +144,25 @@ def extraire_transactions_ia(chemin_pdf: str) -> list[Transaction]:
             contenu = reponse.json()["choices"][0]["message"]["content"]
 
             for ligne in _extraire_json_liste(contenu):
-                try:
-                    tx_date = date.fromisoformat(str(ligne.get("date"))[:10])
-                except (ValueError, TypeError):
+                if not isinstance(ligne, dict):
                     continue
-                debit = ligne.get("debit")
-                credit = ligne.get("credit")
-                debit_rempli = debit not in ("", "null", None)
-                credit_rempli = credit not in ("", "null", None)
-                if not debit_rempli and not credit_rempli:
+                tx_date = _date(ligne.get("date"))
+                if tx_date is None:
                     continue
+                debit = _montant(ligne.get("debit"))
+                credit = _montant(ligne.get("credit"))
                 # Une transaction n'a jamais débit ET crédit à la fois — si les deux sont
                 # remplis, c'est presque toujours deux lignes source fusionnées par erreur
                 # par le modèle plutôt qu'un vrai mouvement double ; on l'écarte plutôt que
                 # de garder une valeur dont on ne peut pas garantir qu'elle soit correcte.
-                if debit_rempli and credit_rempli:
+                if (debit is None) == (credit is None):
                     continue
                 transactions.append(Transaction(
                     date=tx_date,
                     libelle=str(ligne.get("libelle") or "").strip(),
-                    debit=float(debit) if debit not in ("", "null", None) else None,
-                    credit=float(credit) if credit not in ("", "null", None) else None,
-                    solde=float(ligne["solde"]) if ligne.get("solde") not in ("", "null", None) else None,
+                    debit=debit,
+                    credit=credit,
+                    solde=_montant(ligne.get("solde")),
                     banque="IA (vision)",
                     fichier_source=nom_fichier,
                 ))
@@ -208,6 +249,24 @@ def detecter_soldes_ia(chemin_pdf: str) -> dict:
         return {"solde_initial": None, "solde_final": None}
 
 
+def _message_erreur_ia(e: Exception) -> str:
+    import httpx
+    if isinstance(e, httpx.HTTPStatusError):
+        code = e.response.status_code
+        if code == 401:
+            return "clé API refusée par OpenRouter (401) — vérifiez OPENROUTER_API_KEY dans .env"
+        if code == 402:
+            return "crédits OpenRouter épuisés (402) — rechargez le compte sur openrouter.ai"
+        if code == 429:
+            return "trop de requêtes OpenRouter (429) — réessayez dans une minute"
+        return f"erreur OpenRouter {code} : {e.response.text[:200]}"
+    if isinstance(e, httpx.TimeoutException):
+        return "délai dépassé en attendant l'IA — réessayez ou augmentez OPENROUTER_TIMEOUT dans .env"
+    if isinstance(e, httpx.HTTPError):
+        return f"connexion à OpenRouter impossible ({e.__class__.__name__})"
+    return f"{e.__class__.__name__} : {e}"
+
+
 def _ecart(transactions: list[Transaction], solde_initial, solde_final) -> float | None:
     if solde_initial is None or solde_final is None:
         return None
@@ -237,13 +296,23 @@ def extraire_transactions(
     if not Path(chemin_pdf).exists():
         raise FileNotFoundError(f"Fichier introuvable : {chemin_pdf}")
 
+    erreur_ia = None
+
+    def _essayer_ia() -> list[Transaction]:
+        nonlocal erreur_ia
+        try:
+            resultat = extraire_transactions_ia(chemin_pdf)
+        except Exception as e:
+            erreur_ia = _message_erreur_ia(e)
+            return []
+        if not resultat:
+            erreur_ia = "l'IA n'a renvoyé aucune ligne de mouvement exploitable"
+        return resultat
+
     if moteur == "ia":
         if not OPENROUTER_API_KEY:
             raise RuntimeError("Clé API OpenRouter absente : renseignez OPENROUTER_API_KEY dans le fichier .env")
-        try:
-            transactions_ia = extraire_transactions_ia(chemin_pdf)
-        except Exception:
-            transactions_ia = []
+        transactions_ia = _essayer_ia()
         if transactions_ia:
             return transactions_ia, "IA (vision)"
 
@@ -252,17 +321,18 @@ def extraire_transactions(
     banque = parser.NOM_BANQUE
 
     if moteur == "ia" or not OPENROUTER_API_KEY:
+        if not transactions and erreur_ia:
+            raise RuntimeError(f"Numérisation par IA impossible : {erreur_ia}")
         return transactions, banque
 
     ecart_local = _ecart(transactions, solde_initial, solde_final)
     if transactions and (ecart_local is None or ecart_local <= tolerance):
         return transactions, banque
 
-    try:
-        transactions_ia = extraire_transactions_ia(chemin_pdf)
-    except Exception:
-        transactions_ia = []
+    transactions_ia = _essayer_ia()
     if not transactions_ia:
+        if not transactions:
+            raise RuntimeError(f"PDF non lisible localement (scan) et numérisation par IA impossible : {erreur_ia}")
         return transactions, banque
     if not transactions:
         return transactions_ia, "IA (vision)"
