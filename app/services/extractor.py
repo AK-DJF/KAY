@@ -17,7 +17,13 @@ from pathlib import Path
 
 from parsers.detector import detecter_parser
 from parsers.base import Transaction
+import os
+
 from services.facture_extractor import OPENROUTER_API_KEY, OPENROUTER_MODEL, OPENROUTER_TIMEOUT
+
+# Modèle de vision essayé en second quand la lecture du modèle principal ne retrouve pas le
+# solde final (vide dans .env = pas de second essai).
+OPENROUTER_MODEL_SECOURS = os.environ.get("OPENROUTER_MODEL_SECOURS", "google/gemini-2.5-flash").strip()
 
 PROMPT_IA_RELEVE = """Tu es un assistant d'extraction comptable. Cette image est une page d'un \
 relevé bancaire. Extrait TOUTES les lignes de mouvement (transactions) visibles sur cette page \
@@ -51,6 +57,12 @@ Règles strictes :
   aux libellés : rattache chaque montant imprimé à la ligne de mouvement la plus proche, en
   respectant l'ordre des lignes, et classe-le selon sa COLONNE (débit ou crédit), jamais selon
   le libellé.
+- Certains relevés (ex. Attijariwafa) ont trois colonnes de montants : DÉBIT, CAPITAUX, CRÉDIT.
+  Un montant imprimé sous DÉBIT ou CAPITAUX est un débit ; seul un montant dans la colonne la
+  plus à droite (CRÉDIT) est un crédit.
+- Les montants utilisent souvent un espace comme séparateur des milliers (ex. « 119 163,67 ») :
+  recopie le nombre entier sans perdre de chiffre. Une coche ou flèche manuscrite devant un
+  montant n'est pas un chiffre.
 - Si l'année n'est pas dans la colonne date, prends-la dans la colonne date de valeur ou dans
   la période du relevé."""
 
@@ -121,7 +133,7 @@ def _extraire_json_liste(texte: str) -> list:
         return []
 
 
-def extraire_transactions_ia(chemin_pdf: str) -> list[Transaction]:
+def extraire_transactions_ia(chemin_pdf: str, modele: str | None = None) -> list[Transaction]:
     """Extrait les transactions page par page via un modèle de vision (OpenRouter).
     Lève une exception sur tout échec réseau/clé — c'est l'appelant qui décide de
     retomber sur les parseurs locaux dans ce cas."""
@@ -149,7 +161,7 @@ def extraire_transactions_ia(chemin_pdf: str) -> list[Transaction]:
                     "X-Title": "Kwika Numerisation - releves",
                 },
                 json={
-                    "model": OPENROUTER_MODEL,
+                    "model": modele or OPENROUTER_MODEL,
                     "temperature": 0,
                     "messages": [
                         {"role": "user", "content": [
@@ -317,10 +329,10 @@ def extraire_transactions(
 
     erreur_ia = None
 
-    def _essayer_ia() -> list[Transaction]:
+    def _essayer_ia(modele: str | None = None) -> list[Transaction]:
         nonlocal erreur_ia
         try:
-            resultat = extraire_transactions_ia(chemin_pdf)
+            resultat = extraire_transactions_ia(chemin_pdf, modele)
         except Exception as e:
             erreur_ia = _message_erreur_ia(e)
             return []
@@ -328,10 +340,28 @@ def extraire_transactions(
             erreur_ia = "l'IA n'a renvoyé aucune ligne de mouvement exploitable"
         return resultat
 
+    def _rapproche(candidat: list[Transaction]) -> bool:
+        ecart = _ecart(candidat, solde_initial, solde_final)
+        return bool(candidat) and (ecart is None or ecart <= tolerance)
+
+    def _meilleur(*candidats: tuple[list[Transaction], str]) -> tuple[list[Transaction], str]:
+        """Résultat non vide dont l'écart de solde est le plus faible (le premier à égalité)."""
+        non_vides = [c for c in candidats if c[0]]
+        if not non_vides:
+            return [], ""
+        return min(non_vides, key=lambda c: _ecart(c[0], solde_initial, solde_final) or 0.0)
+
+    def _ia_avec_secours() -> list[Transaction]:
+        resultat = _essayer_ia()
+        if _rapproche(resultat) or not OPENROUTER_MODEL_SECOURS or OPENROUTER_MODEL_SECOURS == OPENROUTER_MODEL:
+            return resultat
+        secours = _essayer_ia(OPENROUTER_MODEL_SECOURS)
+        return _meilleur((resultat, ""), (secours, ""))[0]
+
     if moteur == "ia":
         if not OPENROUTER_API_KEY:
             raise RuntimeError("Clé API OpenRouter absente : renseignez OPENROUTER_API_KEY dans le fichier .env")
-        transactions_ia = _essayer_ia()
+        transactions_ia = _ia_avec_secours()
         if transactions_ia:
             return transactions_ia, "IA (vision)"
 
@@ -343,6 +373,14 @@ def extraire_transactions(
         if not transactions and erreur_ia:
             raise RuntimeError(f"Numérisation par IA impossible : {erreur_ia}")
         return transactions, banque
+
+    if _rapproche(transactions):
+        return transactions, banque
+
+    transactions_ia = _ia_avec_secours()
+    if not transactions_ia and not transactions:
+        raise RuntimeError(f"PDF non lisible localement (scan) et numérisation par IA impossible : {erreur_ia}")
+    return _meilleur((transactions, banque), (transactions_ia, "IA (vision)"))
 
     ecart_local = _ecart(transactions, solde_initial, solde_final)
     if transactions and (ecart_local is None or ecart_local <= tolerance):

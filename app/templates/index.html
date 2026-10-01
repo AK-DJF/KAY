@@ -1115,8 +1115,9 @@
           </p>
         </div>
         <div>
-          <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Fichier PDF</label>
-          <input type="file" accept=".pdf" @change="detecterSoldesFichier($event.target.files[0])" required class="w-full mt-1 text-xs">
+          <label class="text-[11px] text-zinc-500 uppercase tracking-wider">Fichier PDF (ou Excel / CSV)</label>
+          <input type="file" accept=".pdf,.xlsx,.csv" @change="detecterSoldesFichier($event.target.files[0])" required class="w-full mt-1 text-xs">
+          <p class="text-[10px] text-zinc-400 mt-1">Excel / CSV : une ligne par mouvement avec les colonnes Date, Libellé, Débit, Crédit.</p>
         </div>
         <label class="flex items-start gap-2 text-xs text-zinc-600">
           <input type="checkbox" x-model="uploadForm.forcer_ia" class="mt-0.5">
@@ -1740,7 +1741,7 @@ function app() {
     async detecterSoldesFichier(file) {
       this.uploadForm.file = file
       this.soldeFinalDetecteParIA = false
-      if (!file) return
+      if (!file || !file.name.toLowerCase().endsWith('.pdf')) return
       this.detectionSoldeEnCours = true
       try {
         const fd = new FormData()
@@ -1764,7 +1765,7 @@ function app() {
     async soumettreUpload(force) {
       this.uploadError = ''
       if (!force) this.uploadConflit = ''
-      if (!this.uploadForm.file) { this.uploadError = 'Fichier PDF requis'; return }
+      if (!this.uploadForm.file) { this.uploadError = 'Fichier requis (PDF, Excel ou CSV)'; return }
 
       this.uploading = true
       const fd = new FormData()

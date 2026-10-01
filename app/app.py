@@ -38,6 +38,7 @@ from auth import (
     utilisateur_courant, verifier_mot_de_passe,
 )
 from services.extractor import detecter_soldes_ia, extraire_transactions
+from services.import_tableur import EXTENSIONS_TABLEUR, extraire_transactions_tableur
 from services.exporter import exporter_consolide_excel, exporter_csv, exporter_releve_excel
 from services.facture_extractor import EXTENSIONS_IMAGE, ExtractionError, extraire_facture
 from services.fec import (
@@ -678,8 +679,9 @@ async def upload_releve(
         raise HTTPException(status_code=400, detail="Moteur d'extraction invalide")
     if not (1 <= mois <= 12):
         raise HTTPException(status_code=400, detail="Mois invalide")
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Le relevé doit être un PDF")
+    est_tableur = file.filename.lower().endswith(EXTENSIONS_TABLEUR)
+    if not (file.filename.lower().endswith(".pdf") or est_tableur):
+        raise HTTPException(status_code=400, detail="Le relevé doit être un PDF, ou un fichier Excel (.xlsx) / CSV de mouvements")
 
     with get_db() as db:
         compte = db.query(CompteBancaire).filter(CompteBancaire.id == compte_id).first()
@@ -710,22 +712,28 @@ async def upload_releve(
                 detail="Solde initial requis (aucun relevé validé du mois précédent à reprendre).",
             )
 
-    # Sauvegarde temporaire sur disque (pdfplumber a besoin d'un chemin)
     contenu = await file.read()
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(contenu)
-        chemin_tmp = tmp.name
+    if est_tableur:
+        try:
+            transactions = extraire_transactions_tableur(file.filename, contenu)
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Échec de la lecture du fichier : {e}")
+        banque_detectee = "Import tableur"
+    else:
+        # Sauvegarde temporaire sur disque (pdfplumber a besoin d'un chemin)
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(contenu)
+            chemin_tmp = tmp.name
 
-    try:
-        transactions, banque_detectee = extraire_transactions(
-            chemin_tmp, moteur=moteur, solde_initial=solde_depart,
-            solde_final=solde_final_attendu, tolerance=TOLERANCE_SOLDE,
-        )
-    except Exception as e:
-        Path(chemin_tmp).unlink(missing_ok=True)
-        raise HTTPException(status_code=422, detail=f"Échec de l'extraction : {e}")
-    finally:
-        Path(chemin_tmp).unlink(missing_ok=True)
+        try:
+            transactions, banque_detectee = extraire_transactions(
+                chemin_tmp, moteur=moteur, solde_initial=solde_depart,
+                solde_final=solde_final_attendu, tolerance=TOLERANCE_SOLDE,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Échec de l'extraction : {e}")
+        finally:
+            Path(chemin_tmp).unlink(missing_ok=True)
 
     if not transactions:
         raise HTTPException(status_code=422, detail="Aucun mouvement extrait — format non reconnu")
