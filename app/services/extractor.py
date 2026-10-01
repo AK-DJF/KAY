@@ -91,6 +91,26 @@ def _date(valeur) -> date | None:
     return None
 
 
+CODES_A_REESSAYER = {429, 500, 502, 503, 504}
+ATTENTES_REESSAI = (5, 15, 30, 60)  # secondes entre les tentatives
+
+
+def _appel_openrouter(httpx, **kwargs):
+    """POST vers OpenRouter avec nouvelles tentatives sur 429 (limite de débit) et erreurs
+    serveur temporaires, en respectant l'en-tête Retry-After quand il est fourni."""
+    import time
+    for attente in (*ATTENTES_REESSAI, None):
+        reponse = httpx.post("https://openrouter.ai/api/v1/chat/completions", **kwargs)
+        if reponse.status_code not in CODES_A_REESSAYER or attente is None:
+            reponse.raise_for_status()
+            return reponse
+        try:
+            attente = max(attente, min(float(reponse.headers.get("retry-after", 0)), 120))
+        except ValueError:
+            pass
+        time.sleep(attente)
+
+
 def _extraire_json_liste(texte: str) -> list:
     debut, fin = texte.find("["), texte.rfind("]")
     if debut == -1 or fin == -1 or fin < debut:
@@ -121,8 +141,8 @@ def extraire_transactions_ia(chemin_pdf: str) -> list[Transaction]:
             image.convert("RGB").save(buf, format="PNG")
             data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
-            reponse = httpx.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+            reponse = _appel_openrouter(
+                httpx,
                 headers={
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
@@ -140,7 +160,6 @@ def extraire_transactions_ia(chemin_pdf: str) -> list[Transaction]:
                 },
                 timeout=OPENROUTER_TIMEOUT,
             )
-            reponse.raise_for_status()
             contenu = reponse.json()["choices"][0]["message"]["content"]
 
             for ligne in _extraire_json_liste(contenu):
@@ -216,8 +235,8 @@ def detecter_soldes_ia(chemin_pdf: str) -> dict:
                 data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
                 contenu_message.append({"type": "image_url", "image_url": {"url": data_url}})
 
-            reponse = httpx.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+            reponse = _appel_openrouter(
+                httpx,
                 headers={
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
@@ -230,7 +249,6 @@ def detecter_soldes_ia(chemin_pdf: str) -> dict:
                 },
                 timeout=OPENROUTER_TIMEOUT,
             )
-            reponse.raise_for_status()
             texte = reponse.json()["choices"][0]["message"]["content"]
 
             debut, fin = texte.find("{"), texte.rfind("}")
@@ -258,7 +276,8 @@ def _message_erreur_ia(e: Exception) -> str:
         if code == 402:
             return "crédits OpenRouter épuisés (402) — rechargez le compte sur openrouter.ai"
         if code == 429:
-            return "trop de requêtes OpenRouter (429) — réessayez dans une minute"
+            return ("OpenRouter limite toujours les requêtes (429) après plusieurs tentatives — réessayez dans "
+                    "quelques minutes, ou changez de modèle via OPENROUTER_MODEL dans .env")
         return f"erreur OpenRouter {code} : {e.response.text[:200]}"
     if isinstance(e, httpx.TimeoutException):
         return "délai dépassé en attendant l'IA — réessayez ou augmentez OPENROUTER_TIMEOUT dans .env"
