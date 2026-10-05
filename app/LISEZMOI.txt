@@ -18,10 +18,26 @@ INSTALLATION RAPIDE (recommandé)
      dessus > "Ouvrir", puis confirmer "Ouvrir")
 
    Ce script installe automatiquement les dépendances, démarre le serveur
-   et ouvre votre navigateur sur http://127.0.0.1:8000.
+   et ouvre votre navigateur sur http://127.0.0.1:8003.
 
 4) Laissez la fenêtre noire (terminal) ouverte tant que vous utilisez
    l'application. Pour arrêter le serveur : fermez la fenêtre ou Ctrl+C.
+
+ACCÈS DEPUIS LES AUTRES POSTES DU RÉSEAU
+-----------------------------------------
+Le serveur écoute sur le port 8003 et accepte les connexions du réseau local.
+Au démarrage, le terminal affiche l'adresse à utiliser depuis les autres postes,
+par exemple :
+       Kikou disponible sur le réseau local : http://192.168.1.38:8003
+
+- Windows : au premier lancement, le pare-feu demande d'autoriser Python ;
+  cochez "Réseaux privés" puis "Autoriser l'accès". Sans cela, les autres
+  postes ne pourront pas se connecter.
+- Pour changer le port : définir la variable d'environnement KIKOU_PORT
+  (ex. KIKOU_PORT=8080) avant de lancer le serveur.
+- Pour réserver l'accès à ce seul poste : KIKOU_HOST=127.0.0.1.
+- Pour que l'adresse ne change pas, réservez une IP fixe pour ce poste dans
+  votre box/routeur.
 
 INSTALLATION MANUELLE (si le script ne fonctionne pas)
 --------------------------------------------------------
@@ -49,7 +65,7 @@ INSTALLATION MANUELLE (si le script ne fonctionne pas)
    (sur Mac/Linux, "python3 app.py" si besoin)
 
 7) Ouvrir votre navigateur à l'adresse :
-       http://127.0.0.1:8000
+       http://127.0.0.1:8003
 
    Au tout premier lancement, la base de données "data.db" est créée automatiquement
    (vide), et vous verrez l'écran de création du compte administrateur.

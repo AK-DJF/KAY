@@ -1521,5 +1521,25 @@ def export_fec_factures(
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
+def _ip_reseau_local() -> Optional[str]:
+    """Adresse IP du poste sur le réseau local (pour l'afficher au démarrage)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))  # aucun paquet envoyé : sert juste à choisir l'interface
+            return s.getsockname()[0]
+    except OSError:
+        return None
+
+
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
+    import os
+    # 0.0.0.0 = accessible depuis les autres postes du réseau local (ex. http://192.168.1.38:8003).
+    # KIKOU_HOST=127.0.0.1 pour restreindre l'accès à ce seul poste.
+    host = os.environ.get("KIKOU_HOST", "0.0.0.0")
+    port = int(os.environ.get("KIKOU_PORT", "8003"))
+    print(f"Kikou disponible sur ce poste : http://127.0.0.1:{port}")
+    ip = _ip_reseau_local()
+    if host == "0.0.0.0" and ip:
+        print(f"Kikou disponible sur le réseau local : http://{ip}:{port}")
+    uvicorn.run("app:app", host=host, port=port, reload=True)
