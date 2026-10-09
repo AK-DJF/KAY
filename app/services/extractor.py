@@ -41,9 +41,19 @@ ni bloc de code, chaque élément avec exactement ces champs :
 Règles strictes :
 - Une transaction bancaire a TOUJOURS soit un débit, soit un crédit — JAMAIS les deux à la fois.
   Ne remplis jamais "debit" et "credit" en même temps sur une même ligne.
-- Chaque ligne du tableau source = un seul objet JSON. Ne fusionne JAMAIS le texte de deux
-  lignes différentes dans un seul "libelle" — si deux lignes te semblent proches ou ambiguës,
-  crée quand même deux objets JSON séparés plutôt que d'en fusionner le contenu.
+- Un mouvement = UN montant imprimé dans la colonne débit ou crédit. Il doit y avoir exactement
+  autant d'objets JSON que de montants imprimés dans ces colonnes (hors soldes et totaux) : ne
+  fusionne jamais deux montants en un seul objet, et n'en saute aucun.
+- Le libellé d'un mouvement peut s'étaler sur plusieurs lignes (ex. « PAIEMENT PRELEVEMENT »
+  puis « LYDEC » juste en dessous, ou « VIREMENT RECU » puis le nom du donneur d'ordre) : les
+  lignes de texte sans montant ni date qui suivent un mouvement font partie de son libellé —
+  réunis-les avec un espace.
+- Les titres de rubrique sans date ni montant (ex. « CHEQUES », « OPERATIONS DIVERSES »,
+  « PAIEMENT PRELEVEMENTS », « VIREMENTS ET MISES A DISPOSITION ») ne sont pas des mouvements
+  et ne font partie d'aucun libellé.
+- « ANCIEN SOLDE », « SOLDE DEPART », « NOUVEAU SOLDE », « SOLDE FINAL », « TOTAL MOUVEMENTS »
+  ne sont jamais des mouvements, même quand leur montant est imprimé dans la colonne crédit ou
+  débit.
 - Recopie le libellé exactement tel qu'affiché (accents compris), sans le raccourcir ni le
   reformuler.
 - "solde" = solde après ce mouvement si indiqué sur la ligne (sinon null).
@@ -51,8 +61,9 @@ Règles strictes :
 - Ignore les lignes d'en-tête, de solde initial/final, de totaux récapitulatifs, de mentions
   légales. Si cette page ne contient aucun mouvement, réponds avec un array vide : [].
 - N'invente jamais une ligne absente de l'image, et ne duplique jamais une ligne déjà extraite.
-- Ignore les annotations manuscrites (coches, flèches, chiffres écrits à la main) : seuls les
-  montants imprimés comptent.
+- Ignore les annotations manuscrites (mots, coches, flèches, chiffres écrits à la main, ex.
+  « LOYER », « CNSS ») : seuls le texte et les montants imprimés comptent, et rien d'écrit à la
+  main ne doit apparaître dans un libellé.
 - Sur les relevés scannés, les montants peuvent être légèrement décalés en hauteur par rapport
   aux libellés : rattache chaque montant imprimé à la ligne de mouvement la plus proche, en
   respectant l'ordre des lignes, et classe-le selon sa COLONNE (débit ou crédit), jamais selon
@@ -63,6 +74,8 @@ Règles strictes :
 - Les montants utilisent souvent un espace comme séparateur des milliers (ex. « 119 163,67 ») :
   recopie le nombre entier sans perdre de chiffre. Une coche ou flèche manuscrite devant un
   montant n'est pas un chiffre.
+- Les dates sont au format jour mois année ; une année sur 2 chiffres se lit 20xx
+  (ex. « 05 08 26 » = 2026-08-05). Utilise la date d'opération (première colonne de date).
 - Si l'année n'est pas dans la colonne date, prends-la dans la colonne date de valeur ou dans
   la période du relevé."""
 
