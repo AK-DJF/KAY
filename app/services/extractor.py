@@ -10,6 +10,7 @@
 # blocage de l'import pour une raison liée à l'IA.
 
 import base64
+import re
 import io
 import json
 from datetime import date
@@ -136,6 +137,22 @@ def _appel_openrouter(httpx, **kwargs):
         time.sleep(attente)
 
 
+# Lignes de solde / report / total que l'IA (ou un parseur) renvoie parfois comme si c'étaient
+# des mouvements — ex. « ANCIEN SOLDE AU 31/07/2026 » lu dans la colonne crédit, qui fausse le
+# rapprochement du montant du solde initial. On les écarte quoi qu'il arrive.
+PATTERN_LIGNE_SOLDE = re.compile(
+    r"\b(ANCIEN|NOUVEAU|ANC\.?|NOUV\.?)\s+SOLDE\b"
+    r"|^\s*SOLDE\s+(DE\s+)?(DEPART|DÉPART|INITIAL|FINAL|PRECEDENT|PRÉCÉDENT|REPORTE|REPORTÉ|AU\b|AU\s*\d|CREDITEUR|CRÉDITEUR|DEBITEUR|DÉBITEUR|DEBUT|DÉBUT|FIN)"
+    r"|\bTOTAL\s+(DES\s+)?(MOUVEMENTS|OPERATIONS|OPÉRATIONS|DEBITS?|DÉBITS?|CREDITS?|CRÉDITS?)\b"
+    r"|\b(REPORT|A\s+REPORTER|À\s+REPORTER|SOLDE\s+REPORTE|SOLDE\s+REPORTÉ)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _est_ligne_de_solde(libelle: str) -> bool:
+    return bool(PATTERN_LIGNE_SOLDE.search(libelle or ""))
+
+
 def _extraire_json_liste(texte: str) -> list:
     debut, fin = texte.find("["), texte.rfind("]")
     if debut == -1 or fin == -1 or fin < debut:
@@ -201,9 +218,12 @@ def extraire_transactions_ia(chemin_pdf: str, modele: str | None = None) -> list
                 # de garder une valeur dont on ne peut pas garantir qu'elle soit correcte.
                 if (debit is None) == (credit is None):
                     continue
+                libelle = str(ligne.get("libelle") or "").strip()
+                if _est_ligne_de_solde(libelle):
+                    continue
                 transactions.append(Transaction(
                     date=tx_date,
-                    libelle=str(ligne.get("libelle") or "").strip(),
+                    libelle=libelle,
                     debit=debit,
                     credit=credit,
                     solde=_montant(ligne.get("solde")),
@@ -379,7 +399,7 @@ def extraire_transactions(
             return transactions_ia, "IA (vision)"
 
     parser = detecter_parser(chemin_pdf)
-    transactions = parser.parse(chemin_pdf)
+    transactions = [t for t in parser.parse(chemin_pdf) if not _est_ligne_de_solde(t.libelle)]
     banque = parser.NOM_BANQUE
 
     if moteur == "ia" or not OPENROUTER_API_KEY:
