@@ -1360,7 +1360,13 @@ function app() {
       this.testIa = 'Test en cours…'
       this.testIaOk = true
       try {
-        const d = await (await fetch('/api/ia/test')).json()
+        const r = await fetch('/api/ia/test')
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok || d.ok === undefined) {
+          this.testIaOk = false
+          this.testIa = `✗ Le serveur a répondu ${r.status} ${d.detail || ''} — relancez l'application (fenêtre noire) puis Ctrl+F5`
+          return
+        }
         this.testIaOk = !!d.ok
         this.testIa = `${d.ok ? '✓' : '✗'} ${d.message} (modèle : ${d.modele})`
       } catch (e) {
