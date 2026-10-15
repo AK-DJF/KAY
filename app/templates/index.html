@@ -1178,7 +1178,7 @@
         <label class="flex items-start gap-2 text-xs text-zinc-600">
           <input type="checkbox" x-model="uploadForm.forcer_ia" class="mt-0.5">
           <span>Numériser avec l'IA (clé API) — recommandé pour les relevés scannés.
-            <span class="block text-[10px] text-zinc-400">Sinon, l'IA prend le relais automatiquement si la lecture locale ne retrouve pas le solde final.</span></span>
+            <span class="block text-[10px] text-zinc-400">L'IA lit le relevé puis se relit elle-même tant que le solde final ne tombe pas juste. Un PDF bancaire d'origine déjà lu sans écart n'est pas envoyé à l'IA.</span></span>
         </label>
 
         <p x-show="uploadError" class="text-xs text-rose-600" x-text="uploadError"></p>
@@ -1341,7 +1341,7 @@ function app() {
     uploading: false,
     uploadError: '',
     uploadConflit: '',
-    uploadForm: { mois: new Date().getMonth() + 1, annee: new Date().getFullYear(), solde_initial: null, solde_final_attendu: null, file: null, forcer_ia: false },
+    uploadForm: { mois: new Date().getMonth() + 1, annee: new Date().getFullYear(), solde_initial: null, solde_final_attendu: null, file: null, forcer_ia: true },
     soldeInitialVerrouille: false,
     detectionSoldeEnCours: false,
     soldeFinalDetecteParIA: false,

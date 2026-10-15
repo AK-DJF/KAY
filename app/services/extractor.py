@@ -24,6 +24,8 @@ from services.facture_extractor import OPENROUTER_API_KEY, OPENROUTER_MODEL, OPE
 
 # Modèle de vision essayé en second quand la lecture du modèle principal ne retrouve pas le
 # solde final (vide dans .env = pas de second essai).
+PASSES_VERIFICATION = int(os.environ.get("OPENROUTER_PASSES_VERIFICATION", "2"))
+PAGES_MAX_VERIFICATION = 15  # au-delà, la requête de vérification (toutes les pages) devient trop lourde
 OPENROUTER_MODEL_SECOURS = os.environ.get("OPENROUTER_MODEL_SECOURS", "google/gemini-2.5-flash").strip()
 
 PROMPT_IA_RELEVE = """Tu es un assistant d'extraction comptable. Cette image est une page d'un \
@@ -163,6 +165,68 @@ def _extraire_json_liste(texte: str) -> list:
         return []
 
 
+def _images_pdf(chemin_pdf: str, resolution: int = 200) -> list[str]:
+    """Pages du PDF en images PNG encodées en data URL (pour les modèles de vision)."""
+    import pdfplumber
+    images = []
+    with pdfplumber.open(chemin_pdf) as pdf:
+        for page in pdf.pages:
+            buf = io.BytesIO()
+            page.to_image(resolution=resolution).original.convert("RGB").save(buf, format="PNG")
+            images.append("data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii"))
+    return images
+
+
+def _demander_ia(contenu: list[dict], modele: str | None, titre: str) -> str:
+    import httpx
+    reponse = _appel_openrouter(
+        httpx,
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+            "X-Title": titre,
+        },
+        json={
+            "model": modele or OPENROUTER_MODEL,
+            "temperature": 0,
+            "messages": [{"role": "user", "content": contenu}],
+        },
+        timeout=OPENROUTER_TIMEOUT,
+    )
+    return reponse.json()["choices"][0]["message"]["content"]
+
+
+def _transactions_depuis_json(lignes: list, nom_fichier: str) -> list[Transaction]:
+    transactions = []
+    for ligne in lignes:
+        if not isinstance(ligne, dict):
+            continue
+        tx_date = _date(ligne.get("date"))
+        if tx_date is None:
+            continue
+        debit = _montant(ligne.get("debit"))
+        credit = _montant(ligne.get("credit"))
+        # Une transaction n'a jamais débit ET crédit à la fois — si les deux sont
+        # remplis, c'est presque toujours deux lignes source fusionnées par erreur
+        # par le modèle plutôt qu'un vrai mouvement double ; on l'écarte plutôt que
+        # de garder une valeur dont on ne peut pas garantir qu'elle soit correcte.
+        if (debit is None) == (credit is None):
+            continue
+        libelle = str(ligne.get("libelle") or "").strip()
+        if _est_ligne_de_solde(libelle):
+            continue
+        transactions.append(Transaction(
+            date=tx_date,
+            libelle=libelle,
+            debit=debit,
+            credit=credit,
+            solde=_montant(ligne.get("solde")),
+            banque="IA (vision)",
+            fichier_source=nom_fichier,
+        ))
+    return transactions
+
+
 def extraire_transactions_ia(chemin_pdf: str, modele: str | None = None) -> list[Transaction]:
     """Extrait les transactions page par page via un modèle de vision (OpenRouter).
     Lève une exception sur tout échec réseau/clé — c'est l'appelant qui décide de
@@ -170,68 +234,68 @@ def extraire_transactions_ia(chemin_pdf: str, modele: str | None = None) -> list
     if not OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY non configurée")
 
-    import httpx
-    import pdfplumber
-
     nom_fichier = Path(chemin_pdf).name
     transactions: list[Transaction] = []
-
-    with pdfplumber.open(chemin_pdf) as pdf:
-        for page in pdf.pages:
-            image = page.to_image(resolution=200).original
-            buf = io.BytesIO()
-            image.convert("RGB").save(buf, format="PNG")
-            data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
-
-            reponse = _appel_openrouter(
-                httpx,
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "X-Title": "Kwika Numerisation - releves",
-                },
-                json={
-                    "model": modele or OPENROUTER_MODEL,
-                    "temperature": 0,
-                    "messages": [
-                        {"role": "user", "content": [
-                            {"type": "text", "text": PROMPT_IA_RELEVE},
-                            {"type": "image_url", "image_url": {"url": data_url}},
-                        ]}
-                    ],
-                },
-                timeout=OPENROUTER_TIMEOUT,
-            )
-            contenu = reponse.json()["choices"][0]["message"]["content"]
-
-            for ligne in _extraire_json_liste(contenu):
-                if not isinstance(ligne, dict):
-                    continue
-                tx_date = _date(ligne.get("date"))
-                if tx_date is None:
-                    continue
-                debit = _montant(ligne.get("debit"))
-                credit = _montant(ligne.get("credit"))
-                # Une transaction n'a jamais débit ET crédit à la fois — si les deux sont
-                # remplis, c'est presque toujours deux lignes source fusionnées par erreur
-                # par le modèle plutôt qu'un vrai mouvement double ; on l'écarte plutôt que
-                # de garder une valeur dont on ne peut pas garantir qu'elle soit correcte.
-                if (debit is None) == (credit is None):
-                    continue
-                libelle = str(ligne.get("libelle") or "").strip()
-                if _est_ligne_de_solde(libelle):
-                    continue
-                transactions.append(Transaction(
-                    date=tx_date,
-                    libelle=libelle,
-                    debit=debit,
-                    credit=credit,
-                    solde=_montant(ligne.get("solde")),
-                    banque="IA (vision)",
-                    fichier_source=nom_fichier,
-                ))
-
+    for data_url in _images_pdf(chemin_pdf):
+        contenu = _demander_ia(
+            [{"type": "text", "text": PROMPT_IA_RELEVE}, {"type": "image_url", "image_url": {"url": data_url}}],
+            modele, "Kikou Numerisation - releves",
+        )
+        transactions.extend(_transactions_depuis_json(_extraire_json_liste(contenu), nom_fichier))
     return transactions
+
+
+PROMPT_IA_CORRECTION = """Tu as extrait les mouvements ci-dessous du relevé bancaire joint (toutes \
+les pages, dans l'ordre). Le contrôle de solde ne tombe pas juste :
+
+  solde initial {solde_initial:.2f} + crédits extraits {total_credit:.2f} − débits extraits \
+{total_debit:.2f} = {solde_calcule:.2f}
+  solde final imprimé sur le relevé : {solde_final:.2f}
+  écart : {ecart:+.2f} (le calcul est trop {sens})
+
+Au moins une ligne est donc fausse : mouvement oublié, ligne en double, montant mal lu (chiffre \
+manquant ou en trop, séparateur de milliers), montant classé dans la mauvaise colonne (débit au \
+lieu de crédit ou l'inverse), ou ligne de solde / de total prise pour un mouvement. Si le relevé \
+imprime des totaux (ex. TOTAL MOUVEMENTS, total débit, total crédit), compare-les aux totaux \
+extraits ci-dessus pour savoir de quel côté se trouve l'erreur.
+
+Relis attentivement les images, ligne par ligne, et renvoie la liste COMPLÈTE et corrigée de \
+tous les mouvements du relevé (pas seulement les lignes modifiées), au même format JSON strict : \
+un array d'objets {{"date": "YYYY-MM-DD", "libelle": ..., "debit": nombre ou null, "credit": \
+nombre ou null}}, sans texte autour. Ne modifie pas une ligne correcte, et n'invente jamais une \
+ligne absente des images pour forcer le solde.
+
+Mouvements extraits :
+{lignes}"""
+
+
+def corriger_transactions_ia(
+    chemin_pdf: str,
+    transactions: list[Transaction],
+    solde_initial: float,
+    solde_final: float,
+    modele: str | None = None,
+    images: list[str] | None = None,
+) -> list[Transaction]:
+    """Deuxième passe de vérification : renvoie au modèle les pages, sa première lecture et
+    l'écart de solde constaté, pour qu'il corrige lui-même les lignes fausses."""
+    total_debit = round(sum(t.debit or 0.0 for t in transactions), 2)
+    total_credit = round(sum(t.credit or 0.0 for t in transactions), 2)
+    solde_calcule = round(solde_initial + total_credit - total_debit, 2)
+    ecart = round(solde_calcule - solde_final, 2)
+    lignes = json.dumps(
+        [{"date": t.date.isoformat(), "libelle": t.libelle, "debit": t.debit, "credit": t.credit} for t in transactions],
+        ensure_ascii=False, indent=0,
+    )
+    texte = PROMPT_IA_CORRECTION.format(
+        solde_initial=solde_initial, total_credit=total_credit, total_debit=total_debit,
+        solde_calcule=solde_calcule, solde_final=solde_final, ecart=ecart,
+        sens="haut" if ecart > 0 else "bas", lignes=lignes,
+    )
+    contenu = [{"type": "text", "text": texte}]
+    contenu += [{"type": "image_url", "image_url": {"url": u}} for u in (images or _images_pdf(chemin_pdf))]
+    reponse = _demander_ia(contenu, modele, "Kikou Numerisation - verification releve")
+    return _transactions_depuis_json(_extraire_json_liste(reponse), Path(chemin_pdf).name)
 
 
 PROMPT_IA_SOLDES = """Tu es un assistant d'extraction comptable. Ces images sont la première et la \
@@ -384,28 +448,54 @@ def extraire_transactions(
             return [], ""
         return min(non_vides, key=lambda c: _ecart(c[0], solde_initial, solde_final) or 0.0)
 
+    def _verifier(resultat: list[Transaction]) -> list[Transaction]:
+        """Passes de vérification par l'IA tant que le solde ne tombe pas juste ; on ne garde
+        une correction que si elle réduit l'écart."""
+        if not resultat or solde_initial is None or solde_final is None:
+            return resultat
+        try:
+            images = _images_pdf(chemin_pdf)
+        except Exception:
+            return resultat
+        if len(images) > PAGES_MAX_VERIFICATION:
+            return resultat
+        for _ in range(PASSES_VERIFICATION):
+            if _rapproche(resultat):
+                break
+            try:
+                corrige = corriger_transactions_ia(chemin_pdf, resultat, solde_initial, solde_final, images=images)
+            except Exception:
+                break
+            if not corrige or _ecart(corrige, solde_initial, solde_final) >= _ecart(resultat, solde_initial, solde_final):
+                break
+            resultat = corrige
+        return resultat
+
     def _ia_avec_secours() -> list[Transaction]:
-        resultat = _essayer_ia()
+        resultat = _verifier(_essayer_ia())
         if _rapproche(resultat) or not OPENROUTER_MODEL_SECOURS or OPENROUTER_MODEL_SECOURS == OPENROUTER_MODEL:
             return resultat
         secours = _essayer_ia(OPENROUTER_MODEL_SECOURS)
         return _meilleur((resultat, ""), (secours, ""))[0]
 
-    if moteur == "ia":
-        if not OPENROUTER_API_KEY:
-            raise RuntimeError("Clé API OpenRouter absente : renseignez OPENROUTER_API_KEY dans le fichier .env")
-        transactions_ia = _ia_avec_secours()
-        if transactions_ia:
-            return transactions_ia, "IA (vision)"
+    if moteur == "ia" and not OPENROUTER_API_KEY:
+        raise RuntimeError("Clé API OpenRouter absente : renseignez OPENROUTER_API_KEY dans le fichier .env")
 
     parser = detecter_parser(chemin_pdf)
     transactions = [t for t in parser.parse(chemin_pdf) if not _est_ligne_de_solde(t.libelle)]
     banque = parser.NOM_BANQUE
 
-    if moteur == "ia" or not OPENROUTER_API_KEY:
-        if not transactions and erreur_ia:
-            raise RuntimeError(f"Numérisation par IA impossible : {erreur_ia}")
+    if not OPENROUTER_API_KEY:
         return transactions, banque
+
+    if moteur == "ia":
+        # PDF texte lu exactement par un parseur dédié : inutile (et plus risqué) de payer l'IA.
+        if _rapproche(transactions) and solde_final is not None:
+            return transactions, banque
+        transactions_ia = _ia_avec_secours()
+        if not transactions_ia and not transactions:
+            raise RuntimeError(f"Numérisation par IA impossible : {erreur_ia}")
+        return _meilleur((transactions_ia, "IA (vision)"), (transactions, banque))
 
     if _rapproche(transactions):
         return transactions, banque
@@ -414,20 +504,3 @@ def extraire_transactions(
     if not transactions_ia and not transactions:
         raise RuntimeError(f"PDF non lisible localement (scan) et numérisation par IA impossible : {erreur_ia}")
     return _meilleur((transactions, banque), (transactions_ia, "IA (vision)"))
-
-    ecart_local = _ecart(transactions, solde_initial, solde_final)
-    if transactions and (ecart_local is None or ecart_local <= tolerance):
-        return transactions, banque
-
-    transactions_ia = _essayer_ia()
-    if not transactions_ia:
-        if not transactions:
-            raise RuntimeError(f"PDF non lisible localement (scan) et numérisation par IA impossible : {erreur_ia}")
-        return transactions, banque
-    if not transactions:
-        return transactions_ia, "IA (vision)"
-
-    ecart_ia = _ecart(transactions_ia, solde_initial, solde_final)
-    if ecart_ia is not None and ecart_ia < ecart_local:
-        return transactions_ia, "IA (vision)"
-    return transactions, banque
