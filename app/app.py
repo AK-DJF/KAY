@@ -37,7 +37,7 @@ from auth import (
     aucun_utilisateur_existant, hasher_mot_de_passe,
     utilisateur_courant, verifier_mot_de_passe,
 )
-from services.extractor import detecter_soldes_ia, extraire_transactions
+from services.extractor import detecter_soldes_ia, extraire_transactions, tester_cle_ia
 from services.import_tableur import EXTENSIONS_TABLEUR, extraire_transactions_tableur
 from services.exporter import exporter_consolide_excel, exporter_csv, exporter_releve_excel
 from services.facture_extractor import EXTENSIONS_IMAGE, ExtractionError, extraire_facture
@@ -713,6 +713,7 @@ async def upload_releve(
             )
 
     contenu = await file.read()
+    infos_extraction: dict = {}
     if est_tableur:
         try:
             transactions = extraire_transactions_tableur(file.filename, contenu)
@@ -728,7 +729,7 @@ async def upload_releve(
         try:
             transactions, banque_detectee = extraire_transactions(
                 chemin_tmp, moteur=moteur, solde_initial=solde_depart,
-                solde_final=solde_final_attendu, tolerance=TOLERANCE_SOLDE,
+                solde_final=solde_final_attendu, tolerance=TOLERANCE_SOLDE, infos=infos_extraction,
             )
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Échec de l'extraction : {e}")
@@ -777,6 +778,7 @@ async def upload_releve(
                     f"Écart de solde sur le relevé {mois:02d}/{annee} ({compte_libelle}) : "
                     f"calculé {solde_calcule:.2f} vs attendu {solde_final_attendu:.2f} "
                     f"(écart {ecart:+.2f})."
+                    + (f" IA non utilisée : {infos_extraction['erreur_ia']}." if infos_extraction.get("erreur_ia") else "")
                 ),
             ))
 
@@ -790,7 +792,13 @@ async def upload_releve(
             "solde_final_calcule": solde_calcule,
             "ecart": ecart,
             "alerte": statut == "ecart",
+            "erreur_ia": infos_extraction.get("erreur_ia"),
         }
+
+
+@app.get("/api/ia/test")
+def tester_ia(user: dict = Depends(utilisateur_courant)):
+    return tester_cle_ia()
 
 
 @app.get("/api/releves")

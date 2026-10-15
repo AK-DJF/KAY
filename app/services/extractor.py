@@ -382,6 +382,8 @@ def _message_erreur_ia(e: Exception) -> str:
         code = e.response.status_code
         if code == 401:
             return "clé API refusée par OpenRouter (401) — vérifiez OPENROUTER_API_KEY dans .env"
+        if code in (400, 404) and "model" in e.response.text.lower():
+            return f"modèle « {OPENROUTER_MODEL} » inconnu ou indisponible sur OpenRouter — corrigez OPENROUTER_MODEL dans .env"
         if code == 402:
             return "crédits OpenRouter épuisés (402) — rechargez le compte sur openrouter.ai"
         if code == 429:
@@ -409,6 +411,7 @@ def extraire_transactions(
     solde_initial: float | None = None,
     solde_final: float | None = None,
     tolerance: float = 0.01,
+    infos: dict | None = None,
 ) -> tuple[list[Transaction], str]:
     """
     Extrait les transactions d'un PDF de relevé bancaire.
@@ -424,17 +427,24 @@ def extraire_transactions(
     if not Path(chemin_pdf).exists():
         raise FileNotFoundError(f"Fichier introuvable : {chemin_pdf}")
 
+    infos = infos if infos is not None else {}
+    infos.update(ia_utilisee=False, erreur_ia=None)
     erreur_ia = None
 
     def _essayer_ia(modele: str | None = None) -> list[Transaction]:
         nonlocal erreur_ia
+        infos["ia_utilisee"] = True
         try:
             resultat = extraire_transactions_ia(chemin_pdf, modele)
         except Exception as e:
             erreur_ia = _message_erreur_ia(e)
+            infos["erreur_ia"] = erreur_ia
             return []
         if not resultat:
             erreur_ia = "l'IA n'a renvoyé aucune ligne de mouvement exploitable"
+            infos["erreur_ia"] = erreur_ia
+        else:
+            infos["erreur_ia"] = None
         return resultat
 
     def _rapproche(candidat: list[Transaction]) -> bool:
@@ -486,6 +496,7 @@ def extraire_transactions(
     banque = parser.NOM_BANQUE
 
     if not OPENROUTER_API_KEY:
+        infos["erreur_ia"] = "aucune clé API OpenRouter dans le fichier .env"
         return transactions, banque
 
     if moteur == "ia":
@@ -504,3 +515,15 @@ def extraire_transactions(
     if not transactions_ia and not transactions:
         raise RuntimeError(f"PDF non lisible localement (scan) et numérisation par IA impossible : {erreur_ia}")
     return _meilleur((transactions, banque), (transactions_ia, "IA (vision)"))
+
+
+def tester_cle_ia() -> dict:
+    """Petit appel texte à OpenRouter pour vérifier la clé, les crédits et le nom du modèle,
+    sans attendre l'import d'un relevé."""
+    if not OPENROUTER_API_KEY:
+        return {"ok": False, "modele": OPENROUTER_MODEL, "message": "aucune clé API OpenRouter dans le fichier .env"}
+    try:
+        _demander_ia([{"type": "text", "text": "Réponds uniquement : OK"}], None, "Kikou Numerisation - test cle")
+    except Exception as e:
+        return {"ok": False, "modele": OPENROUTER_MODEL, "message": _message_erreur_ia(e)}
+    return {"ok": True, "modele": OPENROUTER_MODEL, "message": "clé API et modèle opérationnels"}

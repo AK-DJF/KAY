@@ -1180,6 +1180,10 @@
           <span>Numériser avec l'IA (clé API) — recommandé pour les relevés scannés.
             <span class="block text-[10px] text-zinc-400">L'IA lit le relevé puis se relit elle-même tant que le solde final ne tombe pas juste. Un PDF bancaire d'origine déjà lu sans écart n'est pas envoyé à l'IA.</span></span>
         </label>
+        <div class="flex items-center gap-2 text-[11px]">
+          <button type="button" @click="testerCleIa()" class="px-2 py-1 rounded-md bg-zinc-100 hover:bg-zinc-200 text-zinc-600">Tester la clé API</button>
+          <span x-text="testIa" :class="testIaOk ? 'text-emerald-600' : 'text-rose-600'"></span>
+        </div>
 
         <p x-show="uploadError" class="text-xs text-rose-600" x-text="uploadError"></p>
 
@@ -1349,6 +1353,21 @@ function app() {
     get releveCourant() { return this.releves.find(r => r.id === this.releveSelectionne) || null },
 
     ajoutMouvement: false,
+    testIa: '',
+    testIaOk: false,
+
+    async testerCleIa() {
+      this.testIa = 'Test en cours…'
+      this.testIaOk = true
+      try {
+        const d = await (await fetch('/api/ia/test')).json()
+        this.testIaOk = !!d.ok
+        this.testIa = `${d.ok ? '✓' : '✗'} ${d.message} (modèle : ${d.modele})`
+      } catch (e) {
+        this.testIaOk = false
+        this.testIa = '✗ Erreur réseau'
+      }
+    },
     nouveauMouvement: { date: '', libelle: '', debit: '', credit: '' },
 
     get ecartReleve() {
@@ -1936,7 +1955,9 @@ function app() {
         await this.chargerReleves()
         await this.selectionnerReleve(d.releve_id)
         await this.chargerDashboard()
-        if (d.alerte) alert(`⚠ Écart de solde détecté : calculé ${d.solde_final_calcule} vs attendu ${d.solde_final_attendu}.\nLecture : ${d.banque_detectee}.\nÀ réviser avant de considérer ce relevé comme validé.`)
+        const noteIa = d.erreur_ia ? `\n\n⚠ L'IA n'a PAS été utilisée : ${d.erreur_ia}` : ''
+        if (d.alerte) alert(`⚠ Écart de solde détecté : calculé ${d.solde_final_calcule} vs attendu ${d.solde_final_attendu}.\nLecture : ${d.banque_detectee}.${noteIa}\nÀ réviser avant de considérer ce relevé comme validé.`)
+        else if (d.erreur_ia) alert(`Relevé importé sans écart, mais l'IA n'a pas été utilisée : ${d.erreur_ia}`)
       } catch(e) {
         this.uploadError = 'Erreur réseau'
       }
