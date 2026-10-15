@@ -627,10 +627,20 @@
 
                     <div x-show="releveCourant?.statut === 'ecart'" class="mb-3 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
                       <p>⚠ Écart de solde : calculé <span x-text="fmt(releveCourant.solde_final_calcule)"></span>
-                      vs attendu <span x-text="fmt(releveCourant.solde_final_attendu)"></span> — à réviser avant mise en service.</p>
-                      <button @click="ajouterAjustement()" class="mt-2 px-2.5 py-1 bg-rose-700 hover:bg-rose-600 text-white text-[11px] rounded-lg">
-                        + Ajouter une écriture d'ajustement pour combler l'écart
-                      </button>
+                      vs attendu <span x-text="fmt(releveCourant.solde_final_attendu)"></span> — écart de <b x-text="fmt(Math.abs(ecartReleve))"></b>.</p>
+                      <p class="mt-1 text-[11px] text-rose-600">
+                        Comparez avec le relevé et corrigez les lignes avec ✏️ / 🗑. Pistes : un mouvement de
+                        <b x-text="fmt(Math.abs(ecartReleve))"></b> manquant ou en trop, ou un mouvement de
+                        <b x-text="fmt(Math.abs(ecartReleve) / 2)"></b> classé dans la mauvaise colonne
+                        (les lignes correspondantes sont surlignées en jaune). Vérifiez aussi les soldes.
+                      </p>
+                      <div class="mt-2 flex flex-wrap gap-2">
+                        <button @click="ouvrirAjoutMouvement()" class="px-2.5 py-1 bg-white border border-rose-300 hover:bg-rose-100 text-rose-700 text-[11px] rounded-lg">+ Ajouter un mouvement oublié</button>
+                        <button @click="corrigerSoldes()" class="px-2.5 py-1 bg-white border border-rose-300 hover:bg-rose-100 text-rose-700 text-[11px] rounded-lg">Corriger les soldes</button>
+                        <button @click="ajouterAjustement()" class="px-2.5 py-1 bg-rose-700 hover:bg-rose-600 text-white text-[11px] rounded-lg">
+                          + Ajouter une écriture d'ajustement pour combler l'écart
+                        </button>
+                      </div>
                     </div>
 
                     <div class="grid grid-cols-3 gap-2 mb-4 text-xs">
@@ -652,18 +662,45 @@
                             <th class="text-left py-2 pl-3">Compte comptable</th>
                             <th class="text-left py-2 pl-3">Compte TVA</th>
                             <th class="text-center py-2">Exporté</th>
+                            <th class="w-16 py-2"></th>
                           </tr>
                         </thead>
                         <tbody>
+                          <tr x-show="ajoutMouvement" x-cloak class="border-b border-zinc-200/70 bg-violet-50/60">
+                            <td class="py-2 text-[10px] text-violet-700">Nouveau</td>
+                            <td class="py-2"><input type="date" x-model="nouveauMouvement.date" class="w-32 px-1 py-0.5 text-xs"></td>
+                            <td class="py-2"><input type="text" x-model="nouveauMouvement.libelle" placeholder="Libellé" class="w-full px-1 py-0.5 text-xs"></td>
+                            <td class="py-2 text-right"><input type="text" inputmode="decimal" x-model="nouveauMouvement.debit" placeholder="Débit" class="w-24 px-1 py-0.5 text-xs text-right"></td>
+                            <td class="py-2 text-right"><input type="text" inputmode="decimal" x-model="nouveauMouvement.credit" placeholder="Crédit" class="w-24 px-1 py-0.5 text-xs text-right"></td>
+                            <td colspan="4"></td>
+                            <td class="py-2 whitespace-nowrap text-center">
+                              <button type="button" @click="enregistrerNouveauMouvement()" title="Ajouter" class="px-1.5 text-emerald-700 hover:text-emerald-900">✓</button>
+                              <button type="button" @click="ajoutMouvement=false" title="Annuler" class="px-1.5 text-zinc-500 hover:text-zinc-800">✕</button>
+                            </td>
+                          </tr>
                           <template x-for="m in mouvements" :key="m.id">
-                            <tr class="border-b border-zinc-200/70">
+                            <tr class="border-b border-zinc-200/70" x-data="{ edit:false, f:{} }"
+                                :class="estMontantSuspect(m) ? 'bg-amber-50' : ''"
+                                :title="estMontantSuspect(m) ? 'Montant lié à l\'écart : à vérifier sur le relevé' : ''">
                               <td class="py-2">
                                 <input type="checkbox" :checked="mouvementsSelectionnes.has(m.id)" @change="basculerSelectionMouvement(m.id)">
                               </td>
-                              <td class="py-2 text-zinc-500 font-mono whitespace-nowrap" x-text="fmtDate(m.date)"></td>
-                              <td class="py-2 text-zinc-700" x-text="m.libelle"></td>
-                              <td class="py-2 text-right text-rose-600" x-text="m.debit ? fmt(m.debit) : ''"></td>
-                              <td class="py-2 text-right text-emerald-600" x-text="m.credit ? fmt(m.credit) : ''"></td>
+                              <td class="py-2 text-zinc-500 font-mono whitespace-nowrap">
+                                <span x-show="!edit" x-text="fmtDate(m.date)"></span>
+                                <input x-show="edit" x-cloak type="date" x-model="f.date" class="w-32 px-1 py-0.5 text-xs">
+                              </td>
+                              <td class="py-2 text-zinc-700">
+                                <span x-show="!edit" x-text="m.libelle"></span>
+                                <input x-show="edit" x-cloak type="text" x-model="f.libelle" class="w-full px-1 py-0.5 text-xs">
+                              </td>
+                              <td class="py-2 text-right text-rose-600">
+                                <span x-show="!edit" x-text="m.debit ? fmt(m.debit) : ''"></span>
+                                <input x-show="edit" x-cloak type="text" inputmode="decimal" x-model="f.debit" placeholder="Débit" class="w-24 px-1 py-0.5 text-xs text-right">
+                              </td>
+                              <td class="py-2 text-right text-emerald-600">
+                                <span x-show="!edit" x-text="m.credit ? fmt(m.credit) : ''"></span>
+                                <input x-show="edit" x-cloak type="text" inputmode="decimal" x-model="f.credit" placeholder="Crédit" class="w-24 px-1 py-0.5 text-xs text-right">
+                              </td>
 
                               <!-- Case Tiers (client/fournisseur/salarié, filtrée selon le sens) -->
                               <td class="py-2 pl-3 relative" x-data="{ open:false, q:'' }">
@@ -736,6 +773,22 @@
                                 <span x-show="m.date_dernier_export" class="badge badge-ok">✓</span>
                                 <span x-show="!m.date_dernier_export" class="text-zinc-300">—</span>
                               </td>
+                              <td class="py-2 whitespace-nowrap text-center">
+                                <template x-if="!edit">
+                                  <span>
+                                    <button type="button" title="Modifier"
+                                            @click="f = { date: m.date, libelle: m.libelle, debit: m.debit ?? '', credit: m.credit ?? '' }; edit = true"
+                                            class="px-1 opacity-60 hover:opacity-100">✏️</button>
+                                    <button type="button" title="Supprimer" @click="supprimerMouvement(m)" class="px-1 opacity-60 hover:opacity-100">🗑</button>
+                                  </span>
+                                </template>
+                                <template x-if="edit">
+                                  <span>
+                                    <button type="button" title="Enregistrer" @click="enregistrerMouvement(m, f).then(ok => { if (ok) edit = false })" class="px-1.5 text-emerald-700 hover:text-emerald-900">✓</button>
+                                    <button type="button" title="Annuler" @click="edit = false" class="px-1.5 text-zinc-500 hover:text-zinc-800">✕</button>
+                                  </span>
+                                </template>
+                              </td>
                             </tr>
                           </template>
                         </tbody>
@@ -747,6 +800,9 @@
                             <td class="py-2 text-right text-rose-600" x-text="fmt(totalDebitMouvements)"></td>
                             <td class="py-2 text-right text-emerald-600" x-text="fmt(totalCreditMouvements)"></td>
                             <td colspan="4"></td>
+                            <td class="py-2 text-center">
+                              <button type="button" @click="ouvrirAjoutMouvement()" title="Ajouter un mouvement" class="px-2 py-0.5 text-[11px] rounded-md bg-zinc-100 hover:bg-zinc-200 text-zinc-600">+ Ligne</button>
+                            </td>
                           </tr>
                         </tfoot>
                       </table>
@@ -1292,6 +1348,22 @@ function app() {
 
     get releveCourant() { return this.releves.find(r => r.id === this.releveSelectionne) || null },
 
+    ajoutMouvement: false,
+    nouveauMouvement: { date: '', libelle: '', debit: '', credit: '' },
+
+    get ecartReleve() {
+      const r = this.releveCourant
+      if (!r || r.solde_final_calcule == null) return 0
+      return Math.round((r.solde_final_calcule - r.solde_final_attendu) * 100) / 100
+    },
+
+    estMontantSuspect(m) {
+      const e = Math.abs(this.ecartReleve)
+      if (this.releveCourant?.statut !== 'ecart' || e < 0.01) return false
+      const montant = m.debit || m.credit || 0
+      return Math.abs(montant - e) < 0.01 || Math.abs(montant - e / 2) < 0.01
+    },
+
     get totalDebitMouvements() { return this.mouvements.reduce((s, m) => s + (m.debit || 0), 0) },
     get totalCreditMouvements() { return this.mouvements.reduce((s, m) => s + (m.credit || 0), 0) },
 
@@ -1635,6 +1707,81 @@ function app() {
       if (!this.releveSelectionne) return
       const r = await fetch(`/api/releves/${this.releveSelectionne}/mouvements`)
       this.mouvements = await r.json()
+    },
+
+    lireMontant(v) {
+      if (v === '' || v === null || v === undefined) return 0
+      const n = parseFloat(String(v).replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'))
+      return isNaN(n) ? NaN : Math.abs(n)
+    },
+
+    montantEtSens(f) {
+      const debit = this.lireMontant(f.debit), credit = this.lireMontant(f.credit)
+      if (isNaN(debit) || isNaN(credit)) { alert('Montant invalide.'); return null }
+      if ((debit > 0) === (credit > 0)) { alert('Saisissez un montant soit en débit, soit en crédit (pas les deux).'); return null }
+      return debit > 0 ? { montant: debit, sens: 'debit' } : { montant: credit, sens: 'credit' }
+    },
+
+    async apresCorrectionReleve(r) {
+      const d = await r.json()
+      if (!r.ok) { alert(d.detail || 'Erreur'); return false }
+      await this.chargerReleves()
+      await this.rechargerMouvements()
+      if (this.chargerDashboard) await this.chargerDashboard()
+      return true
+    },
+
+    async enregistrerMouvement(m, f) {
+      const ms = this.montantEtSens(f)
+      if (!ms) return false
+      if (!String(f.libelle || '').trim()) { alert('Libellé requis.'); return false }
+      const r = await fetch(`/api/mouvements/${m.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: f.date || null, libelle: f.libelle, ...ms }),
+      })
+      return this.apresCorrectionReleve(r)
+    },
+
+    async supprimerMouvement(m) {
+      const montant = this.fmt(m.debit || m.credit)
+      if (!confirm(`Supprimer le mouvement « ${m.libelle} » (${montant}) ?`)) return
+      const r = await fetch(`/api/mouvements/${m.id}`, { method: 'DELETE' })
+      await this.apresCorrectionReleve(r)
+    },
+
+    ouvrirAjoutMouvement() {
+      const r = this.releveCourant
+      const jour = r ? `${r.annee}-${String(r.mois).padStart(2, '0')}-01` : ''
+      this.nouveauMouvement = { date: jour, libelle: '', debit: '', credit: '' }
+      this.ajoutMouvement = true
+    },
+
+    async enregistrerNouveauMouvement() {
+      const f = this.nouveauMouvement
+      const ms = this.montantEtSens(f)
+      if (!ms) return
+      if (!f.libelle.trim()) { alert('Libellé requis.'); return }
+      const r = await fetch(`/api/releves/${this.releveSelectionne}/mouvements`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: f.date || null, libelle: f.libelle, ...ms }),
+      })
+      if (await this.apresCorrectionReleve(r)) this.ajoutMouvement = false
+    },
+
+    async corrigerSoldes() {
+      const r0 = this.releveCourant
+      if (!r0) return
+      const lire = (v) => parseFloat(String(v).replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'))
+      const si = prompt('Solde initial (créditeur = positif, débiteur = négatif) :', r0.solde_initial)
+      if (si === null) return
+      const sf = prompt('Solde final attendu (créditeur = positif, débiteur = négatif) :', r0.solde_final_attendu)
+      if (sf === null) return
+      if (isNaN(lire(si)) || isNaN(lire(sf))) { alert('Montant invalide.'); return }
+      const r = await fetch(`/api/releves/${this.releveSelectionne}/soldes`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ solde_initial: lire(si), solde_final_attendu: lire(sf) }),
+      })
+      await this.apresCorrectionReleve(r)
     },
 
     async ajouterAjustement() {

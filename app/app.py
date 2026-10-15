@@ -879,17 +879,119 @@ def ajouter_mouvement_ajustement(releve_id: int, payload: AjustementMouvementPay
         db.add(m)
         db.flush()
 
-        mouvements = db.query(Mouvement).filter(Mouvement.releve_id == releve_id).all()
-        total_debit = sum(mv.debit or 0.0 for mv in mouvements)
-        total_credit = sum(mv.credit or 0.0 for mv in mouvements)
-        solde_calcule = round(releve.solde_initial + total_credit - total_debit, 2)
-        ecart = round(solde_calcule - releve.solde_final_attendu, 2)
+        return {"ok": True, "mouvement_id": m.id, **_recalculer_releve(db, releve)}
 
-        releve.solde_final_calcule = solde_calcule
-        releve.nb_mouvements = len(mouvements)
-        releve.statut = "ok" if abs(ecart) <= TOLERANCE_SOLDE else "ecart"
 
-        return {"ok": True, "mouvement_id": m.id, "solde_final_calcule": solde_calcule, "statut": releve.statut}
+def _recalculer_releve(db, releve: Releve) -> dict:
+    """Recalcule solde final calculé, nombre de mouvements et statut d'un relevé après une
+    correction manuelle ; résout l'anomalie d'écart ouverte quand le relevé tombe juste."""
+    db.flush()
+    mouvements = db.query(Mouvement).filter(Mouvement.releve_id == releve.id).all()
+    total_debit = sum(mv.debit or 0.0 for mv in mouvements)
+    total_credit = sum(mv.credit or 0.0 for mv in mouvements)
+    solde_calcule = round(releve.solde_initial + total_credit - total_debit, 2)
+    ecart = round(solde_calcule - releve.solde_final_attendu, 2)
+
+    releve.solde_final_calcule = solde_calcule
+    releve.nb_mouvements = len(mouvements)
+    releve.statut = "ok" if abs(ecart) <= TOLERANCE_SOLDE else "ecart"
+    if releve.statut == "ok":
+        for a in db.query(Anomalie).filter(Anomalie.ref_type == "releve", Anomalie.ref_id == releve.id, Anomalie.resolue == False).all():
+            a.resolue = True
+            a.date_resolution = datetime.utcnow()
+    return {"solde_final_calcule": solde_calcule, "ecart": ecart, "statut": releve.statut, "nb_mouvements": len(mouvements)}
+
+
+# ── Correction manuelle des mouvements et des soldes d'un relevé (quand l'extraction a mal lu
+# une ligne : montant, sens débit/crédit, ligne manquante ou en trop) ─────────────────────────
+
+DateMouvement = date  # alias : un champ nommé « date » masquerait le type dans la classe
+
+
+class MouvementPayload(BaseModel):
+    date: Optional[DateMouvement] = None
+    libelle: Optional[str] = None
+    montant: Optional[float] = None
+    sens: Optional[str] = None  # "credit" ou "debit"
+
+
+def _valider_montant_sens(montant: Optional[float], sens: Optional[str]):
+    if sens is not None and sens not in ("credit", "debit"):
+        raise HTTPException(status_code=400, detail="sens doit être 'credit' ou 'debit'")
+    if montant is not None and montant <= 0:
+        raise HTTPException(status_code=400, detail="Le montant doit être supérieur à 0")
+
+
+@app.patch("/api/mouvements/{mouvement_id}")
+def modifier_mouvement(mouvement_id: int, payload: MouvementPayload, user: dict = Depends(utilisateur_courant)):
+    _valider_montant_sens(payload.montant, payload.sens)
+    with get_db() as db:
+        m = db.query(Mouvement).filter(Mouvement.id == mouvement_id).first()
+        if not m:
+            raise HTTPException(status_code=404, detail="Mouvement introuvable")
+        if payload.date is not None:
+            m.date = payload.date
+        if payload.libelle is not None:
+            if not payload.libelle.strip():
+                raise HTTPException(status_code=400, detail="Libellé requis")
+            m.libelle = payload.libelle.strip()
+        if payload.montant is not None or payload.sens is not None:
+            montant = payload.montant if payload.montant is not None else (m.debit or m.credit)
+            sens = payload.sens or ("debit" if m.debit else "credit")
+            m.debit = montant if sens == "debit" else None
+            m.credit = montant if sens == "credit" else None
+        releve = db.query(Releve).filter(Releve.id == m.releve_id).first()
+        return {"ok": True, **_recalculer_releve(db, releve)}
+
+
+@app.delete("/api/mouvements/{mouvement_id}")
+def supprimer_mouvement(mouvement_id: int, user: dict = Depends(utilisateur_courant)):
+    with get_db() as db:
+        m = db.query(Mouvement).filter(Mouvement.id == mouvement_id).first()
+        if not m:
+            raise HTTPException(status_code=404, detail="Mouvement introuvable")
+        releve = db.query(Releve).filter(Releve.id == m.releve_id).first()
+        db.delete(m)
+        return {"ok": True, **_recalculer_releve(db, releve)}
+
+
+@app.post("/api/releves/{releve_id}/mouvements")
+def ajouter_mouvement(releve_id: int, payload: MouvementPayload, user: dict = Depends(utilisateur_courant)):
+    if payload.montant is None or payload.sens is None or not (payload.libelle or "").strip():
+        raise HTTPException(status_code=400, detail="Date, libellé, montant et sens requis")
+    _valider_montant_sens(payload.montant, payload.sens)
+    with get_db() as db:
+        releve = db.query(Releve).filter(Releve.id == releve_id).first()
+        if not releve:
+            raise HTTPException(status_code=404, detail="Relevé introuvable")
+        m = Mouvement(
+            releve_id=releve_id,
+            date=payload.date or date(releve.annee, releve.mois, calendar.monthrange(releve.annee, releve.mois)[1]),
+            libelle=payload.libelle.strip(),
+            debit=payload.montant if payload.sens == "debit" else None,
+            credit=payload.montant if payload.sens == "credit" else None,
+        )
+        db.add(m)
+        db.flush()
+        return {"ok": True, "mouvement_id": m.id, **_recalculer_releve(db, releve)}
+
+
+class SoldesPayload(BaseModel):
+    solde_initial: Optional[float] = None
+    solde_final_attendu: Optional[float] = None
+
+
+@app.patch("/api/releves/{releve_id}/soldes")
+def modifier_soldes_releve(releve_id: int, payload: SoldesPayload, user: dict = Depends(utilisateur_courant)):
+    with get_db() as db:
+        releve = db.query(Releve).filter(Releve.id == releve_id).first()
+        if not releve:
+            raise HTTPException(status_code=404, detail="Relevé introuvable")
+        if payload.solde_initial is not None:
+            releve.solde_initial = payload.solde_initial
+        if payload.solde_final_attendu is not None:
+            releve.solde_final_attendu = payload.solde_final_attendu
+        return {"ok": True, **_recalculer_releve(db, releve)}
 
 
 # ── Sélection de mouvements pour l'export + marquage "déjà exporté" (évolution du 2026-08-04) ──
