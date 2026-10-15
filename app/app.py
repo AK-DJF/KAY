@@ -730,6 +730,7 @@ async def upload_releve(
             transactions, banque_detectee = extraire_transactions(
                 chemin_tmp, moteur=moteur, solde_initial=solde_depart,
                 solde_final=solde_final_attendu, tolerance=TOLERANCE_SOLDE, infos=infos_extraction,
+                periode=(annee, mois),
             )
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Échec de l'extraction : {e}")

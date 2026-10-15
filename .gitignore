@@ -7,3 +7,4 @@ __pycache__/
 app/data.db.backup-*
 app/factures_files/*
 !app/factures_files/.gitkeep
+app/ia_reponses.log

@@ -13,7 +13,7 @@ import base64
 import re
 import io
 import json
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from parsers.detector import detecter_parser
@@ -101,22 +101,34 @@ def _montant(valeur) -> float | None:
         return None
 
 
-def _date(valeur) -> date | None:
+def _date(valeur, periode: tuple[int, int] | None = None) -> date | None:
+    """Date renvoyée par l'IA ou un tableur : ISO, JJ/MM/AAAA, JJ MM AA, ou JJ/MM sans année
+    (fréquent sur les relevés marocains) complétée avec la période du relevé."""
     texte = str(valeur or "").strip()
     try:
         return date.fromisoformat(texte[:10])
     except ValueError:
         pass
-    morceaux = [m for m in texte.replace("/", " ").replace("-", " ").replace(".", " ").split() if m.isdigit()]
-    if len(morceaux) == 3:
-        jour, mois, annee = (int(m) for m in morceaux)
+    morceaux = [m for m in re.split(r"[\s/.\-]+", texte) if m.isdigit()]
+    if len(morceaux) >= 3:
+        if len(morceaux[0]) == 4:  # AAAA MM JJ
+            annee, mois, jour = (int(m) for m in morceaux[:3])
+        else:
+            jour, mois, annee = (int(m) for m in morceaux[:3])
         if annee < 100:
             annee += 2000
-        try:
-            return date(annee, mois, jour)
-        except ValueError:
-            return None
-    return None
+    elif len(morceaux) == 2 and periode:
+        jour, mois = (int(m) for m in morceaux)
+        annee = periode[0]
+        # Relevé de janvier : une opération de décembre appartient à l'année précédente.
+        if mois == 12 and periode[1] == 1:
+            annee -= 1
+    else:
+        return None
+    try:
+        return date(annee, mois, jour)
+    except ValueError:
+        return None
 
 
 CODES_A_REESSAYER = {429, 500, 502, 503, 504}
@@ -155,14 +167,59 @@ def _est_ligne_de_solde(libelle: str) -> bool:
     return bool(PATTERN_LIGNE_SOLDE.search(libelle or ""))
 
 
-def _extraire_json_liste(texte: str) -> list:
-    debut, fin = texte.find("["), texte.rfind("]")
-    if debut == -1 or fin == -1 or fin < debut:
-        return []
+def _charger_json_souple(texte: str):
     try:
-        return json.loads(texte[debut:fin + 1])
+        return json.loads(texte)
     except json.JSONDecodeError:
-        return []
+        # Virgules finales ou blocs ```json : erreurs de format fréquentes des modèles.
+        nettoye = re.sub(r",\s*([\]}])", r"\1", texte)
+        return json.loads(nettoye)
+
+
+def _extraire_json_liste(texte: str) -> list:
+    """Liste de mouvements dans la réponse du modèle : array JSON nu, entouré de texte ou d'un
+    bloc ```json, ou rangé dans un objet ({"transactions": [...]}, {"mouvements": [...]}…)."""
+    texte = (texte or "").strip()
+    texte = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", texte)
+    candidats = [texte]
+    debut, fin = texte.find("["), texte.rfind("]")
+    if debut != -1 and fin > debut:
+        candidats.append(texte[debut:fin + 1])
+    debut, fin = texte.find("{"), texte.rfind("}")
+    if debut != -1 and fin > debut:
+        candidats.append(texte[debut:fin + 1])
+    for candidat in candidats:
+        try:
+            donnees = _charger_json_souple(candidat)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(donnees, list):
+            return donnees
+        if isinstance(donnees, dict):
+            listes = [v for v in donnees.values() if isinstance(v, list) and any(isinstance(x, dict) for x in v)]
+            if listes:
+                return max(listes, key=len)
+            if any(k in _cles_normalisees(donnees) for k in ("date", "debit", "credit", "montant")):
+                return [donnees]
+    return []
+
+
+def _sans_accents(texte: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode().lower()
+
+
+def _cles_normalisees(ligne: dict) -> dict:
+    """Clés en minuscules sans accents ni séparateurs : « Débit », « date_operation »,
+    « Date Opération » deviennent « debit », « dateoperation »…"""
+    return {re.sub(r"[^a-z]", "", _sans_accents(str(k))): v for k, v in ligne.items()}
+
+
+def _premiere_valeur(ligne: dict, *cles: str):
+    for cle in cles:
+        if ligne.get(cle) not in (None, "", "null"):
+            return ligne[cle]
+    return None
 
 
 def _images_pdf(chemin_pdf: str, resolution: int = 200) -> list[str]:
@@ -193,26 +250,65 @@ def _demander_ia(contenu: list[dict], modele: str | None, titre: str) -> str:
         },
         timeout=OPENROUTER_TIMEOUT,
     )
-    return reponse.json()["choices"][0]["message"]["content"]
+    contenu = reponse.json()["choices"][0]["message"].get("content")
+    if isinstance(contenu, list):  # certains fournisseurs renvoient des « parts »
+        contenu = "".join(p.get("text", "") for p in contenu if isinstance(p, dict))
+    contenu = contenu or ""
+    _journaliser_reponse(titre, modele or OPENROUTER_MODEL, contenu)
+    return contenu
 
 
-def _transactions_depuis_json(lignes: list, nom_fichier: str) -> list[Transaction]:
+# Dernières réponses brutes de l'IA, gardées dans ia_reponses.log (dossier de l'application)
+# pour diagnostiquer une lecture vide ou fausse sans avoir à reproduire l'appel.
+JOURNAL_IA = Path(__file__).resolve().parent.parent / "ia_reponses.log"
+_derniere_reponse_ia = ""
+
+
+def _journaliser_reponse(titre: str, modele: str, contenu: str):
+    global _derniere_reponse_ia
+    _derniere_reponse_ia = contenu
+    try:
+        with open(JOURNAL_IA, "a", encoding="utf-8") as f:
+            f.write(f"===== {datetime.now():%Y-%m-%d %H:%M:%S} | {titre} | {modele}\n{contenu}\n\n")
+    except OSError:
+        pass
+
+
+def _vider_journal_ia():
+    try:
+        JOURNAL_IA.write_text("", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _transactions_depuis_json(lignes: list, nom_fichier: str, periode: tuple[int, int] | None = None) -> list[Transaction]:
     transactions = []
-    for ligne in lignes:
-        if not isinstance(ligne, dict):
+    for brute in lignes:
+        if not isinstance(brute, dict):
             continue
-        tx_date = _date(ligne.get("date"))
+        ligne = _cles_normalisees(brute)
+        tx_date = _date(_premiere_valeur(ligne, "date", "dateoperation", "dateop", "datevaleur", "valeur"), periode)
         if tx_date is None:
             continue
-        debit = _montant(ligne.get("debit"))
-        credit = _montant(ligne.get("credit"))
+        debit = _montant(_premiere_valeur(ligne, "debit", "debits", "montantdebit", "sortie", "retrait"))
+        credit = _montant(_premiere_valeur(ligne, "credit", "credits", "montantcredit", "entree", "versement"))
+        if debit is None and credit is None and _premiere_valeur(ligne, "montant", "amount") is not None:
+            # Format { "montant": …, "sens": "debit" | "credit" } ou montant signé.
+            brut = _premiere_valeur(ligne, "montant", "amount")
+            montant = _montant(brut)
+            sens = _sans_accents(str(_premiere_valeur(ligne, "sens", "type", "nature") or ""))
+            negatif = str(brut).strip().startswith("-") or (isinstance(brut, (int, float)) and brut < 0)
+            if "deb" in sens or (not sens and negatif):
+                debit = montant
+            elif "cred" in sens or not sens:
+                credit = montant
         # Une transaction n'a jamais débit ET crédit à la fois — si les deux sont
         # remplis, c'est presque toujours deux lignes source fusionnées par erreur
         # par le modèle plutôt qu'un vrai mouvement double ; on l'écarte plutôt que
         # de garder une valeur dont on ne peut pas garantir qu'elle soit correcte.
         if (debit is None) == (credit is None):
             continue
-        libelle = str(ligne.get("libelle") or "").strip()
+        libelle = str(_premiere_valeur(ligne, "libelle", "description", "label", "operation", "designation") or "").strip()
         if _est_ligne_de_solde(libelle):
             continue
         transactions.append(Transaction(
@@ -220,14 +316,14 @@ def _transactions_depuis_json(lignes: list, nom_fichier: str) -> list[Transactio
             libelle=libelle,
             debit=debit,
             credit=credit,
-            solde=_montant(ligne.get("solde")),
+            solde=_montant(_premiere_valeur(ligne, "solde", "balance")),
             banque="IA (vision)",
             fichier_source=nom_fichier,
         ))
     return transactions
 
 
-def extraire_transactions_ia(chemin_pdf: str, modele: str | None = None) -> list[Transaction]:
+def extraire_transactions_ia(chemin_pdf: str, modele: str | None = None, periode: tuple[int, int] | None = None) -> list[Transaction]:
     """Extrait les transactions page par page via un modèle de vision (OpenRouter).
     Lève une exception sur tout échec réseau/clé — c'est l'appelant qui décide de
     retomber sur les parseurs locaux dans ce cas."""
@@ -241,7 +337,7 @@ def extraire_transactions_ia(chemin_pdf: str, modele: str | None = None) -> list
             [{"type": "text", "text": PROMPT_IA_RELEVE}, {"type": "image_url", "image_url": {"url": data_url}}],
             modele, "Kikou Numerisation - releves",
         )
-        transactions.extend(_transactions_depuis_json(_extraire_json_liste(contenu), nom_fichier))
+        transactions.extend(_transactions_depuis_json(_extraire_json_liste(contenu), nom_fichier, periode))
     return transactions
 
 
@@ -276,6 +372,7 @@ def corriger_transactions_ia(
     solde_final: float,
     modele: str | None = None,
     images: list[str] | None = None,
+    periode: tuple[int, int] | None = None,
 ) -> list[Transaction]:
     """Deuxième passe de vérification : renvoie au modèle les pages, sa première lecture et
     l'écart de solde constaté, pour qu'il corrige lui-même les lignes fausses."""
@@ -295,7 +392,7 @@ def corriger_transactions_ia(
     contenu = [{"type": "text", "text": texte}]
     contenu += [{"type": "image_url", "image_url": {"url": u}} for u in (images or _images_pdf(chemin_pdf))]
     reponse = _demander_ia(contenu, modele, "Kikou Numerisation - verification releve")
-    return _transactions_depuis_json(_extraire_json_liste(reponse), Path(chemin_pdf).name)
+    return _transactions_depuis_json(_extraire_json_liste(reponse), Path(chemin_pdf).name, periode)
 
 
 PROMPT_IA_SOLDES = """Tu es un assistant d'extraction comptable. Ces images sont la première et la \
@@ -412,6 +509,7 @@ def extraire_transactions(
     solde_final: float | None = None,
     tolerance: float = 0.01,
     infos: dict | None = None,
+    periode: tuple[int, int] | None = None,
 ) -> tuple[list[Transaction], str]:
     """
     Extrait les transactions d'un PDF de relevé bancaire.
@@ -427,6 +525,7 @@ def extraire_transactions(
     if not Path(chemin_pdf).exists():
         raise FileNotFoundError(f"Fichier introuvable : {chemin_pdf}")
 
+    _vider_journal_ia()
     infos = infos if infos is not None else {}
     infos.update(ia_utilisee=False, erreur_ia=None)
     erreur_ia = None
@@ -435,13 +534,15 @@ def extraire_transactions(
         nonlocal erreur_ia
         infos["ia_utilisee"] = True
         try:
-            resultat = extraire_transactions_ia(chemin_pdf, modele)
+            resultat = extraire_transactions_ia(chemin_pdf, modele, periode)
         except Exception as e:
             erreur_ia = _message_erreur_ia(e)
             infos["erreur_ia"] = erreur_ia
             return []
         if not resultat:
-            erreur_ia = "l'IA n'a renvoyé aucune ligne de mouvement exploitable"
+            extrait = " ".join(_derniere_reponse_ia.split())[:250] or "(réponse vide)"
+            erreur_ia = (f"l'IA n'a renvoyé aucune ligne de mouvement exploitable — début de sa réponse : « {extrait} » "
+                         f"(réponses complètes dans {JOURNAL_IA.name})")
             infos["erreur_ia"] = erreur_ia
         else:
             infos["erreur_ia"] = None
@@ -473,7 +574,7 @@ def extraire_transactions(
             if _rapproche(resultat):
                 break
             try:
-                corrige = corriger_transactions_ia(chemin_pdf, resultat, solde_initial, solde_final, images=images)
+                corrige = corriger_transactions_ia(chemin_pdf, resultat, solde_initial, solde_final, images=images, periode=periode)
             except Exception:
                 break
             if not corrige or _ecart(corrige, solde_initial, solde_final) >= _ecart(resultat, solde_initial, solde_final):
