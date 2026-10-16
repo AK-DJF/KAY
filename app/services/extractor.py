@@ -54,7 +54,8 @@ Règles strictes :
 - Les titres de rubrique sans date ni montant (ex. « CHEQUES », « OPERATIONS DIVERSES »,
   « PAIEMENT PRELEVEMENTS », « VIREMENTS ET MISES A DISPOSITION ») ne sont pas des mouvements
   et ne font partie d'aucun libellé.
-- « ANCIEN SOLDE », « SOLDE DEPART », « NOUVEAU SOLDE », « SOLDE FINAL », « TOTAL MOUVEMENTS »
+- « ANCIEN SOLDE », « SOLDE DEPART », « NOUVEAU SOLDE », « SOLDE FINAL », « TOTAL MOUVEMENTS »,
+  et les reports entre pages « SOLDE REPORT », « SOLDE A REPORTER », « A REPORTER »,
   ne sont jamais des mouvements, même quand leur montant est imprimé dans la colonne crédit ou
   débit.
 - Recopie le libellé exactement tel qu'affiché (accents compris), sans le raccourcir ni le
@@ -156,9 +157,10 @@ def _appel_openrouter(httpx, **kwargs):
 # rapprochement du montant du solde initial. On les écarte quoi qu'il arrive.
 PATTERN_LIGNE_SOLDE = re.compile(
     r"\b(ANCIEN|NOUVEAU|ANC\.?|NOUV\.?)\s+SOLDE\b"
-    r"|^\s*SOLDE\s+(DE\s+)?(DEPART|DÉPART|INITIAL|FINAL|PRECEDENT|PRÉCÉDENT|REPORTE|REPORTÉ|AU\b|AU\s*\d|CREDITEUR|CRÉDITEUR|DEBITEUR|DÉBITEUR|DEBUT|DÉBUT|FIN)"
+    r"|^\s*SOLDE\s+(DE\s+)?(DEPART|DÉPART|INITIAL|FINAL|PRECEDENT|PRÉCÉDENT|REPORTE|REPORTÉ|REPORT\b|A\s+REPORTER|À\s+REPORTER|AU\b|AU\s*\d|CREDITEUR|CRÉDITEUR|DEBITEUR|DÉBITEUR|DEBUT|DÉBUT|FIN)"
     r"|\bTOTAL\s+(DES\s+)?(MOUVEMENTS|OPERATIONS|OPÉRATIONS|DEBITS?|DÉBITS?|CREDITS?|CRÉDITS?)\b"
-    r"|\b(REPORT|A\s+REPORTER|À\s+REPORTER|SOLDE\s+REPORTE|SOLDE\s+REPORTÉ)\s*$",
+    r"|\b(REPORT|A\s+REPORTER|À\s+REPORTER|SOLDE\s+REPORTE|SOLDE\s+REPORTÉ)[\s:.\-]*$"
+    r"|^[\s:.\-]*(REPORT|A\s+REPORTER|À\s+REPORTER)\b",
     re.IGNORECASE,
 )
 
