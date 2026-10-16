@@ -1,6 +1,7 @@
 # parsers/base.py
 # Contrat commun à tous les parsers de relevés bancaires
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date
@@ -86,3 +87,19 @@ def regrouper_lignes_par_position(words: list[dict], seuil: float = 2.0) -> list
 
     return lignes
 
+
+
+_RE_DATE_COMPLETE = re.compile(r'\b\d{1,2}[/.\- ]\d{1,2}[/.\- ](20\d{2})\b')
+_RE_ANNEE_SEULE = re.compile(r'\b(20\d{2})\b')
+
+
+def deviner_annee_releve(texte: str) -> int:
+    """Année d'un relevé : d'abord l'année la plus fréquente parmi les vraies dates
+    (JJ/MM/AAAA, JJ MM AAAA…), sinon le premier « 20xx » du texte — qui peut être un numéro de
+    compte ou une référence, d'où ce second choix seulement en dernier recours."""
+    from collections import Counter
+    annees = Counter(int(a) for a in _RE_DATE_COMPLETE.findall(texte))
+    if annees:
+        return annees.most_common(1)[0][0]
+    m = _RE_ANNEE_SEULE.search(texte)
+    return int(m.group(1)) if m else date.today().year

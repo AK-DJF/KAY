@@ -534,6 +534,26 @@ def _message_erreur_ia(e: Exception) -> str:
     return f"{e.__class__.__name__} : {e}"
 
 
+def _recaler_annees(transactions: list[Transaction], periode: tuple[int, int] | None) -> list[Transaction]:
+    """Les parseurs locaux devinent l'année à partir du premier « 20xx » du texte, qui peut être
+    un numéro de compte ou une référence (ex. 2009) ; l'IA peut aussi se tromper d'année. On
+    recale toute date dont l'année s'écarte de plus d'un an de la période choisie à l'import,
+    en gardant jour et mois (décembre d'un relevé de janvier -> année précédente, et inversement)."""
+    if not periode:
+        return transactions
+    annee, mois = periode
+    for t in transactions:
+        if abs(t.date.year - annee) <= 1:
+            continue
+        nouvelle = annee - 1 if (t.date.month == 12 and mois == 1) else annee + 1 if (t.date.month == 1 and mois == 12) else annee
+        try:
+            t.date = t.date.replace(year=nouvelle)
+        except ValueError:  # 29 février
+            t.date = t.date.replace(year=nouvelle, day=28)
+        t.annee, t.mois = t.date.year, t.date.month
+    return transactions
+
+
 def _ecart(transactions: list[Transaction], solde_initial, solde_final) -> float | None:
     if solde_initial is None or solde_final is None:
         return None
@@ -576,7 +596,7 @@ def extraire_transactions(
         nonlocal erreur_ia
         infos["ia_utilisee"] = True
         try:
-            resultat = extraire_transactions_ia(chemin_pdf, modele, periode)
+            resultat = _recaler_annees(extraire_transactions_ia(chemin_pdf, modele, periode), periode)
         except Exception as e:
             erreur_ia = _message_erreur_ia(e)
             infos["erreur_ia"] = erreur_ia
@@ -619,6 +639,7 @@ def extraire_transactions(
                 corrige = corriger_transactions_ia(chemin_pdf, resultat, solde_initial, solde_final, images=images, periode=periode)
             except Exception:
                 break
+            corrige = _recaler_annees(corrige, periode)
             if not corrige or _ecart(corrige, solde_initial, solde_final) >= _ecart(resultat, solde_initial, solde_final):
                 break
             resultat = corrige
@@ -636,7 +657,9 @@ def extraire_transactions(
 
     parser = detecter_parser(chemin_pdf)
     try:
-        transactions = [t for t in parser.parse(chemin_pdf) if not _est_ligne_de_solde(t.libelle)]
+        transactions = _recaler_annees(
+            [t for t in parser.parse(chemin_pdf) if not _est_ligne_de_solde(t.libelle)], periode
+        )
     except Exception:
         # PDF que pdfplumber ne sait pas ouvrir (scan mal formé, image renommée…) : l'IA, qui
         # passe par un autre moteur de rendu, peut encore le lire.

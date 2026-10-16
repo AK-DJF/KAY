@@ -16,10 +16,9 @@ from typing import Optional
 
 import pdfplumber
 
-from .base import BaseParser, Transaction, regrouper_lignes_par_position
+from .base import BaseParser, Transaction, regrouper_lignes_par_position, deviner_annee_releve
 
 RE_DATE_TETE = re.compile(r'^(\d{2})\s+(\d{2})$')
-RE_ANNEE = re.compile(r'\b(20\d{2})\b')
 
 X_DATE_VALEUR_MIN = 300
 X_MONTANT_MIN = 345
@@ -46,8 +45,7 @@ class MarocColonnesParser(BaseParser):
         return "DIRHAM" in texte_complet.upper()
 
     def _deviner_annee(self, texte: str) -> int:
-        m = RE_ANNEE.search(texte)
-        return int(m.group(1)) if m else date.today().year
+        return deviner_annee_releve(texte)
 
     def parse(self, chemin_pdf: str) -> list[Transaction]:
         nom_fichier = Path(chemin_pdf).name

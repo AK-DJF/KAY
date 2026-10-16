@@ -11,11 +11,10 @@ from typing import Optional
 
 import pdfplumber
 
-from .base import BaseParser, Transaction
+from .base import BaseParser, Transaction, deviner_annee_releve
 from .util_position import grouper_lignes, extraire_montant_final, seuil_colonnes, est_credit
 
 PATTERN_DEUX_CHIFFRES = re.compile(r'^\d{2}$')
-PATTERN_ANNEE = re.compile(r'\b(20\d{2})\b')
 
 # Mots-clés de repli si la détection de colonne échoue (page à une seule écriture)
 MOTS_CLES_CREDIT = ('VIREMENT SRBM', 'VIR.RECU', 'VIR RECU', 'REMISE', 'ENCAISSEMENT', 'REGLEMENT DE VOTRE REMISE')
@@ -31,8 +30,7 @@ class BmceParser(BaseParser):
         ) and "Attijariwafa" not in texte_complet and "C.I.H" not in texte_complet
 
     def _extraire_annee(self, texte: str) -> int:
-        m = PATTERN_ANNEE.search(texte)
-        return int(m.group(1)) if m else date.today().year
+        return deviner_annee_releve(texte)
 
     def parse(self, chemin_pdf: str) -> list[Transaction]:
         nom_fichier = Path(chemin_pdf).name
