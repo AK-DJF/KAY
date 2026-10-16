@@ -222,16 +222,56 @@ def _premiere_valeur(ligne: dict, *cles: str):
     return None
 
 
+COTE_MAX_IMAGE = 2400  # px : au-delà, l'image est réduite (lisibilité suffisante, requête plus légère)
+
+
+def _pages_pil(chemin_pdf: str, resolution: int = 200) -> list:
+    """Pages du document en images PIL. Essaie pypdfium2 (tolérant aux PDF de scanners et
+    d'applications mobiles mal formés), puis pdfplumber ; accepte aussi une image (JPEG/PNG)
+    enregistrée avec l'extension .pdf."""
+    from PIL import Image
+
+    with open(chemin_pdf, "rb") as f:
+        entete = f.read(8)
+    if entete.startswith(b"\xff\xd8") or entete.startswith(b"\x89PNG"):
+        return [Image.open(chemin_pdf).convert("RGB")]
+
+    pages = []
+    try:
+        import pypdfium2 as pdfium
+        document = pdfium.PdfDocument(chemin_pdf)
+        try:
+            for index in range(len(document)):
+                pages.append(document[index].render(scale=resolution / 72).to_pil().convert("RGB"))
+        finally:
+            document.close()
+    except Exception:
+        pages = []
+    if not pages:
+        try:
+            import pdfplumber
+            with pdfplumber.open(chemin_pdf) as pdf:
+                pages = [p.to_image(resolution=resolution).original.convert("RGB") for p in pdf.pages]
+        except Exception:
+            pages = []
+    return pages
+
+
 def _images_pdf(chemin_pdf: str, resolution: int = 200) -> list[str]:
-    """Pages du PDF en images PNG encodées en data URL (pour les modèles de vision)."""
-    import pdfplumber
+    """Pages du PDF en images JPEG encodées en data URL (pour les modèles de vision)."""
     images = []
-    with pdfplumber.open(chemin_pdf) as pdf:
-        for page in pdf.pages:
-            buf = io.BytesIO()
-            page.to_image(resolution=resolution).original.convert("RGB").save(buf, format="PNG")
-            images.append("data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii"))
+    for image in _pages_pil(chemin_pdf, resolution):
+        if max(image.size) > COTE_MAX_IMAGE:
+            image.thumbnail((COTE_MAX_IMAGE, COTE_MAX_IMAGE))
+        buf = io.BytesIO()
+        image.save(buf, format="JPEG", quality=88)
+        images.append("data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii"))
     return images
+
+
+ERREUR_AUCUNE_PAGE = ("aucune page lisible dans le PDF — il est peut-être protégé par un mot de passe ou "
+                      "endommagé : ouvrez-le puis « Imprimer » > « Microsoft Print to PDF » pour en refaire "
+                      "une copie, et importez cette copie")
 
 
 def _demander_ia(contenu: list[dict], modele: str | None, titre: str) -> str:
@@ -332,7 +372,10 @@ def extraire_transactions_ia(chemin_pdf: str, modele: str | None = None, periode
 
     nom_fichier = Path(chemin_pdf).name
     transactions: list[Transaction] = []
-    for data_url in _images_pdf(chemin_pdf):
+    images = _images_pdf(chemin_pdf)
+    if not images:
+        raise RuntimeError(ERREUR_AUCUNE_PAGE)
+    for data_url in images:
         contenu = _demander_ia(
             [{"type": "text", "text": PROMPT_IA_RELEVE}, {"type": "image_url", "image_url": {"url": data_url}}],
             modele, "Kikou Numerisation - releves",
@@ -425,50 +468,43 @@ def detecter_soldes_ia(chemin_pdf: str) -> dict:
         return {"solde_initial": None, "solde_final": None}
 
     import httpx
-    import pdfplumber
 
     try:
-        with pdfplumber.open(chemin_pdf) as pdf:
-            pages_a_envoyer = [pdf.pages[0]]
-            if len(pdf.pages) > 1:
-                pages_a_envoyer.append(pdf.pages[-1])
+        images = _images_pdf(chemin_pdf)
+        if not images:
+            return {"solde_initial": None, "solde_final": None}
+        contenu_message = [{"type": "text", "text": PROMPT_IA_SOLDES}]
+        for data_url in ([images[0], images[-1]] if len(images) > 1 else images):
+            contenu_message.append({"type": "image_url", "image_url": {"url": data_url}})
 
-            contenu_message = [{"type": "text", "text": PROMPT_IA_SOLDES}]
-            for page in pages_a_envoyer:
-                image = page.to_image(resolution=200).original
-                buf = io.BytesIO()
-                image.convert("RGB").save(buf, format="PNG")
-                data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
-                contenu_message.append({"type": "image_url", "image_url": {"url": data_url}})
+        reponse = _appel_openrouter(
+            httpx,
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "X-Title": "Kikou Numerisation - soldes",
+            },
+            json={
+                "model": OPENROUTER_MODEL,
+                "temperature": 0,
+                "messages": [{"role": "user", "content": contenu_message}],
+            },
+            timeout=OPENROUTER_TIMEOUT,
+        )
+        texte = reponse.json()["choices"][0]["message"]["content"]
 
-            reponse = _appel_openrouter(
-                httpx,
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "X-Title": "Kikou Numerisation - soldes",
-                },
-                json={
-                    "model": OPENROUTER_MODEL,
-                    "temperature": 0,
-                    "messages": [{"role": "user", "content": contenu_message}],
-                },
-                timeout=OPENROUTER_TIMEOUT,
-            )
-            texte = reponse.json()["choices"][0]["message"]["content"]
+        debut, fin = texte.find("{"), texte.rfind("}")
+        if debut == -1 or fin == -1 or fin < debut:
+            return {"solde_initial": None, "solde_final": None}
+        data = json.loads(texte[debut:fin + 1])
 
-            debut, fin = texte.find("{"), texte.rfind("}")
-            if debut == -1 or fin == -1 or fin < debut:
-                return {"solde_initial": None, "solde_final": None}
-            data = json.loads(texte[debut:fin + 1])
+        def _nombre(v):
+            try:
+                return float(v) if v not in ("", "null", None) else None
+            except (TypeError, ValueError):
+                return None
 
-            def _nombre(v):
-                try:
-                    return float(v) if v not in ("", "null", None) else None
-                except (TypeError, ValueError):
-                    return None
-
-            return {"solde_initial": _nombre(data.get("solde_initial")), "solde_final": _nombre(data.get("solde_final"))}
+        return {"solde_initial": _nombre(data.get("solde_initial")), "solde_final": _nombre(data.get("solde_final"))}
     except Exception:
         return {"solde_initial": None, "solde_final": None}
 
@@ -491,6 +527,8 @@ def _message_erreur_ia(e: Exception) -> str:
         return "délai dépassé en attendant l'IA — réessayez ou augmentez OPENROUTER_TIMEOUT dans .env"
     if isinstance(e, httpx.HTTPError):
         return f"connexion à OpenRouter impossible ({e.__class__.__name__})"
+    if isinstance(e, RuntimeError):
+        return str(e)
     return f"{e.__class__.__name__} : {e}"
 
 
@@ -525,7 +563,9 @@ def extraire_transactions(
     if not Path(chemin_pdf).exists():
         raise FileNotFoundError(f"Fichier introuvable : {chemin_pdf}")
 
+    global _derniere_reponse_ia
     _vider_journal_ia()
+    _derniere_reponse_ia = ""
     infos = infos if infos is not None else {}
     infos.update(ia_utilisee=False, erreur_ia=None)
     erreur_ia = None
@@ -593,7 +633,12 @@ def extraire_transactions(
         raise RuntimeError("Clé API OpenRouter absente : renseignez OPENROUTER_API_KEY dans le fichier .env")
 
     parser = detecter_parser(chemin_pdf)
-    transactions = [t for t in parser.parse(chemin_pdf) if not _est_ligne_de_solde(t.libelle)]
+    try:
+        transactions = [t for t in parser.parse(chemin_pdf) if not _est_ligne_de_solde(t.libelle)]
+    except Exception:
+        # PDF que pdfplumber ne sait pas ouvrir (scan mal formé, image renommée…) : l'IA, qui
+        # passe par un autre moteur de rendu, peut encore le lire.
+        transactions = []
     banque = parser.NOM_BANQUE
 
     if not OPENROUTER_API_KEY:
