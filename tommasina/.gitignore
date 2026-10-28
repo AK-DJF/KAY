@@ -1,5 +1,3 @@
 data.db
 data.avant-restauration.db
 __pycache__/
-seed.json
-*.xlsx

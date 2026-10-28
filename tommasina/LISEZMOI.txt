@@ -51,7 +51,6 @@ NOTES SUR LA REPRISE DU TABLEAU
 
 DONNÉES INITIALES
 -----------------
-seed.json (données du tableau, noms de clients inclus) n'est pas versionné dans Git.
-Sans lui, l'application démarre avec une base vide ; copier seed.json à côté de app.py
-avant le premier lancement pour charger les 80 lignes. tools/make_seed.py le régénère
-depuis le fichier Excel : python tools/make_seed.py chemin/vers/le_tableau.xlsx
+seed.json (données du tableau) est versionné avec l'application : au premier lancement,
+data.db en est créé. Il contient des noms de clients : garder le dépôt privé.
+tools/make_seed.py le régénère depuis l'Excel (Quote_part_terrain_TOMMASINA_2025.xlsx).
