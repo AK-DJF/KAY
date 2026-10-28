@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tommasina — Lots et chiffre d'affaires</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#1c2430;--mut:#6b7686;--line:#dfe3e9;--accent:#1f3a5f;--gold:#b8892b;--ok:#1f7a4d;--warn:#b3541e;--calc:#f0f3f8;--sel:#fff8e6}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#10151c;--card:#182029;--ink:#e6eaf0;--mut:#8f9bad;--line:#2a3441;--accent:#7fa6d8;--gold:#d9a94a;--ok:#4cc38a;--warn:#e8864a;--calc:#1d2733;--sel:#2b2616}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:var(--accent);color:#fff;padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) header{color:#10151c}}
+h1{margin:0;font-size:18px}
+h1 small{font-weight:400;opacity:.8;margin-left:8px}
+main{padding:16px;max-width:1800px;margin:0 auto}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--gold);border-color:var(--gold);color:#fff}
+header button,header .btn{background:transparent;color:inherit;border-color:rgba(255,255,255,.45)}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.kpi b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.kpi span{color:var(--mut);font-size:12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center}
+.bar input,.bar select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
+.tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.wrap{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:calc(100vh - 250px)}
+table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
+th,td{padding:0;border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--accent);color:#fff;font-weight:600;font-size:12px;padding:8px 6px;z-index:2;text-align:left}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) th{color:#10151c}}
+td input{width:100%;border:0;background:transparent;color:inherit;font:inherit;padding:6px;outline:none}
+td input:focus{background:var(--sel);box-shadow:inset 0 0 0 2px var(--gold)}
+td.num input,td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.calc{background:var(--calc);padding:6px;text-align:right;font-variant-numeric:tabular-nums;color:var(--mut)}
+td.calc.neg{color:var(--warn)}
+tr.libre td:not(.calc){opacity:.9}
+tr.libre td.st span{color:var(--mut)}
+td.st{padding:6px;font-size:12px}
+td.st span.v{color:var(--ok);font-weight:600}
+td.act{padding:2px 6px}
+tfoot td{position:sticky;bottom:0;background:var(--card);font-weight:700;padding:8px 6px;border-top:2px solid var(--accent);text-align:right;font-variant-numeric:tabular-nums}
+.del{border:0;color:var(--warn);background:none;padding:2px 6px}
+.mois{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;max-width:760px}
+.mois table{width:100%}
+.mois td,.mois th{padding:8px;border-right:0}
+.mois .b{background:var(--gold);height:10px;border-radius:3px;min-width:2px}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);padding:18px;max-width:420px;width:92vw}
+dialog label{display:block;margin:10px 0 2px;color:var(--mut);font-size:12px}
+dialog input{width:100%;font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;opacity:0;transition:.25s;pointer-events:none}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>Tommasina <small>Quote-part de terrain · chiffre d'affaires</small></h1>
+  <div class="actions">
+    <button class="primary" id="add">+ Nouveau lot</button>
+    <button id="params">Paramètres</button>
+    <a class="btn" href="/api/export.xlsx" style="text-decoration:none">Exporter Excel</a>
+    <a class="btn" href="/api/sauvegarde" style="text-decoration:none">Sauvegarde</a>
+    <button id="restore">Restaurer</button>
+    <input type="file" id="file" accept=".db" hidden>
+  </div>
+</header>
+<main>
+  <div class="kpis" id="kpis"></div>
+  <div class="bar">
+    <span class="tabs"><button class="on" data-tab="lots">Lots</button> <button data-tab="mois">CA par mois</button></span>
+    <input id="q" placeholder="Rechercher (client, TF, propriété…)" size="30">
+    <select id="fniveau"><option value="">Tous les niveaux</option></select>
+    <select id="fstatut"><option value="">Tous les statuts</option><option value="vendu">Vendus</option><option value="libre">Non vendus</option></select>
+    <span id="compte" style="color:var(--mut)"></span>
+  </div>
+  <div id="vlots" class="wrap"><table id="t"></table></div>
+  <div id="vmois" class="mois" hidden></div>
+</main>
+<dialog id="dlg">
+  <h3 style="margin-top:0">Paramètres du terrain</h3>
+  <label>Surface du terrain (m²)</label><input id="p_surface" type="number" step="any">
+  <label>Prix total du terrain (Dhs)</label><input id="p_total" type="number" step="any">
+  <label>Prix m² (Dhs) — utilisé pour les lots sans prix propre</label><input id="p_prix" type="number" step="any">
+  <label>TVA (%)</label><input id="p_tva" type="number" step="any">
+  <p style="color:var(--mut);font-size:12px">Prix m² dans le tableau d'origine : prix total ÷ surface = <span id="p_calc"></span></p>
+  <div class="actions" style="justify-content:flex-end"><button id="p_cancel">Annuler</button><button class="primary" id="p_ok">Enregistrer</button></div>
+</dialog>
+<div class="toast" id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+const fmt=(v,d=2)=>v==null||v===''?'':Number(v).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmt0=v=>fmt(v,0);
+let lots=[],P={};
+const COLS=[ // [titre, champ, type, classe]
+ ['Date contrat','date_contrat','date'],['Client','client','text'],['TF','tf','text'],['Propriété','propriete','text'],
+ ['Indice','indice','text'],['Niveau','niveau','text'],['Consistance','consistance','text'],
+ ['Dans le titre (m²)','surface_titre','number','num'],['Total avec surplomb (m²)','surface_totale','number','num'],
+ ['Quote-part terrain (m²)','quote_part_m2','calc4'],['Prix m²','prix_m2','number','num'],
+ ['Part terrain (Dhs)','part_terrain','calc'],['Prix hors part terrain','prix_hors_terrain','calc'],
+ ['Prix HT','prix_ht','calc'],['TVA','tva','calc'],['TTC','prix_ttc','number','num'],
+ ['Encaissé','encaisse','number','num'],['% encaissé','taux_encaisse','pct'],['Notes','notes','text']];
+const WIDTH={date_contrat:120,client:230,tf:110,propriete:110,indice:70,niveau:110,consistance:110,surface_titre:80,surface_totale:90,prix_m2:100,prix_ttc:110,encaisse:100,notes:200};
+
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1800)}
+async function api(url,opt){const r=await fetch(url,opt);if(!r.ok){let m='Erreur';try{m=(await r.json()).detail||m}catch{}throw new Error(typeof m==='string'?m:'Valeur invalide')}return r.json()}
+async function load(){const d=await api('/api/lots');lots=d.lots;P=d.parametres;
+  const niv=[...new Set(lots.map(l=>l.niveau&&l.niveau.trim()).filter(Boolean))];
+  const s=$('#fniveau'),cur=s.value;s.innerHTML='<option value="">Tous les niveaux</option>'+niv.map(n=>`<option>${n}</option>`).join('');s.value=cur;render()}
+
+function filtered(){const q=$('#q').value.toLowerCase(),n=$('#fniveau').value,s=$('#fstatut').value;
+  return lots.filter(l=>(!q||[l.client,l.tf,l.propriete,l.indice,l.consistance,l.notes].join(' ').toLowerCase().includes(q))
+   &&(!n||(l.niveau||'').trim()===n)&&(!s||(s==='vendu')===l.vendu))}
+
+function render(){
+  const L=filtered(),sum=k=>L.reduce((a,l)=>a+(l[k]||0),0);
+  const V=lots.filter(l=>l.vendu),ca=V.reduce((a,l)=>a+l.prix_ttc,0);
+  const enc=lots.reduce((a,l)=>a+(l.encaisse||0),0);
+  $('#kpis').innerHTML=[
+   [fmt0(ca)+' Dhs','CA TTC (lots vendus)'],[V.filter(l=>l.propriete).length+' / '+lots.filter(l=>l.propriete).length,'Lots vendus / total'],
+   [fmt0(V.reduce((a,l)=>a+(l.prix_ht||0),0))+' Dhs','CA HT hors terrain'],[fmt0(V.reduce((a,l)=>a+(l.part_terrain||0),0))+' Dhs','Part terrain des lots vendus'],
+   [fmt0(enc)+' Dhs','Encaissé'],[fmt(lots.reduce((a,l)=>a+(l.quote_part_m2||0),0))+' m²','Terrain réparti sur '+fmt0(P.surface_terrain)+' m²']
+  ].map(([b,s])=>`<div class="kpi"><b>${b}</b><span>${s}</span></div>`).join('');
+  $('#compte').textContent=L.length+' ligne(s)';
+  const head='<thead><tr>'+COLS.map(c=>`<th>${c[0]}</th>`).join('')+'<th>Statut</th><th></th></tr></thead>';
+  const body=L.map(l=>`<tr data-id="${l.id}" class="${l.vendu?'':'libre'}">`+COLS.map(([t,k,ty,cl])=>{
+    if(ty==='calc'||ty==='calc4'){const v=l[k];return `<td class="calc ${v<0?'neg':''}" data-k="${k}">${fmt(v,ty==='calc4'?4:2)}</td>`}
+    if(ty==='pct')return `<td class="calc" data-k="${k}">${l[k]==null?'':fmt(l[k]*100,1)+' %'}</td>`;
+    const v=l[k]??'',ph=k==='prix_m2'?` placeholder="${fmt(P.prix_m2)}"`:'';
+    return `<td class="${cl||''}" style="min-width:${WIDTH[k]||90}px"><input data-k="${k}" type="${ty==='date'?'date':ty==='number'?'number':'text'}" ${ty==='number'?'step="any"':''} value="${String(v).replace(/"/g,'&quot;')}"${ph}></td>`}).join('')
+   +`<td class="st" data-k="statut">${l.vendu?'<span class="v">Vendu</span>':'<span>—</span>'}</td><td class="act"><button class="del" title="Supprimer">✕</button></td></tr>`).join('');
+  const tot=(k,d=2)=>`<td>${fmt(sum(k),d)}</td>`;
+  const foot='<tfoot><tr><td colspan="7" style="text-align:left">TOTAL</td>'+tot('surface_titre',0)+tot('surface_totale',0)+tot('quote_part_m2',4)+'<td></td>'+tot('part_terrain')+tot('prix_hors_terrain')+tot('prix_ht')+tot('tva')+tot('prix_ttc')+tot('encaisse')+'<td colspan="4"></td></tr></tfoot>';
+  $('#t').innerHTML=head+'<tbody>'+body+'</tbody>'+foot;
+  renderMois();
+}
+
+function renderMois(){
+  const m={};lots.filter(l=>l.vendu&&l.date_contrat).forEach(l=>{const k=l.date_contrat.slice(0,7);(m[k]??={n:0,ttc:0,ht:0,enc:0});m[k].n++;m[k].ttc+=l.prix_ttc;m[k].ht+=l.prix_ht||0;m[k].enc+=l.encaisse||0});
+  const ks=Object.keys(m).sort(),mx=Math.max(1,...ks.map(k=>m[k].ttc));
+  const sd=lots.filter(l=>l.vendu&&!l.date_contrat).length;
+  $('#vmois').innerHTML='<h3 style="margin-top:0">Chiffre d\'affaires par mois de contrat</h3><table><thead><tr><th style="background:none;color:inherit;position:static">Mois</th><th style="background:none;color:inherit;position:static">Lots</th><th style="background:none;color:inherit;position:static;text-align:right">TTC</th><th style="background:none;color:inherit;position:static;text-align:right">HT</th><th style="width:30%;background:none"></th></tr></thead><tbody>'
+   +ks.map(k=>{const [y,mo]=k.split('-');const nom=new Date(y,mo-1).toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+     return `<tr><td>${nom}</td><td>${m[k].n}</td><td style="text-align:right">${fmt0(m[k].ttc)}</td><td style="text-align:right">${fmt0(m[k].ht)}</td><td><div class="b" style="width:${m[k].ttc/mx*100}%"></div></td></tr>`}).join('')
+   +`</tbody><tfoot><tr><td style="position:static;text-align:left">Total</td><td style="position:static;text-align:left">${ks.reduce((a,k)=>a+m[k].n,0)}</td><td style="position:static">${fmt0(ks.reduce((a,k)=>a+m[k].ttc,0))}</td><td style="position:static">${fmt0(ks.reduce((a,k)=>a+m[k].ht,0))}</td><td style="position:static"></td></tr></tfoot></table>`
+   +(sd?`<p style="color:var(--mut)">${sd} lot(s) vendu(s) sans date de contrat, non comptés ici.</p>`:'');
+}
+
+// édition en place : enregistre à la sortie du champ et met à jour les colonnes calculées
+$('#t').addEventListener('change',async e=>{
+  const inp=e.target.closest('input[data-k]');if(!inp)return;
+  const tr=inp.closest('tr'),id=+tr.dataset.id,l=lots.find(x=>x.id===id);
+  const body={};COLS.forEach(([t,k,ty])=>{if(['text','date','number'].includes(ty))body[k]=l[k]??null});
+  const k=inp.dataset.k,ty=COLS.find(c=>c[1]===k)[2];
+  body[k]=inp.value===''?null:(ty==='number'?parseFloat(inp.value):inp.value);
+  try{const nl=await api('/api/lots/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    Object.assign(l,nl);tr.className=nl.vendu?'':'libre';
+    tr.querySelectorAll('td.calc').forEach(td=>{const kk=td.dataset.k,c=COLS.find(c=>c[1]===kk),v=nl[kk];
+      td.textContent=c[2]==='pct'?(v==null?'':fmt(v*100,1)+' %'):fmt(v,c[2]==='calc4'?4:2);td.classList.toggle('neg',v<0)});
+    tr.querySelector('[data-k=statut]').innerHTML=nl.vendu?'<span class="v">Vendu</span>':'<span>—</span>';
+    // totaux, KPI, mois : rafraîchissement sans reconstruire les champs en cours de saisie
+    const f=document.activeElement;const pos=f&&f.dataset?[f.closest('tr')?.dataset.id,f.dataset.k]:null;
+    render();if(pos&&pos[0]){const n=document.querySelector(`tr[data-id="${pos[0]}"] input[data-k="${pos[1]}"]`);n&&n.focus()}
+    toast('Enregistré');
+  }catch(err){toast(err.message);load()}
+});
+$('#t').addEventListener('click',async e=>{
+  if(!e.target.classList.contains('del'))return;
+  const tr=e.target.closest('tr'),l=lots.find(x=>x.id===+tr.dataset.id);
+  if(!confirm(`Supprimer ${l.propriete||l.indice||'cette ligne'}${l.client?' ('+l.client+')':''} ?`))return;
+  await api('/api/lots/'+l.id,{method:'DELETE'});toast('Supprimé');load()});
+$('#add').onclick=async()=>{const nl=await api('/api/lots',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  $('#q').value='';$('#fniveau').value='';$('#fstatut').value='';await load();
+  const w=$('#vlots');w.scrollTop=w.scrollHeight;document.querySelector(`tr[data-id="${nl.id}"] input[data-k=propriete]`)?.focus()};
+['#q','#fniveau','#fstatut'].forEach(s=>$(s).addEventListener('input',render));
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  const m=b.dataset.tab==='mois';$('#vlots').hidden=m;$('#vmois').hidden=!m});
+
+// paramètres
+const calc=()=>$('#p_calc').textContent=fmt($('#p_total').value/$('#p_surface').value,4);
+$('#params').onclick=()=>{$('#p_surface').value=P.surface_terrain;$('#p_total').value=P.prix_terrain_total;$('#p_prix').value=P.prix_m2;$('#p_tva').value=P.tva*100;calc();$('#dlg').showModal()};
+['#p_total','#p_surface'].forEach(s=>$(s).addEventListener('input',calc));
+$('#p_cancel').onclick=()=>$('#dlg').close();
+$('#p_ok').onclick=async()=>{try{const d=await api('/api/parametres',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({surface_terrain:+$('#p_surface').value,prix_terrain_total:+$('#p_total').value,prix_m2:+$('#p_prix').value,tva:+$('#p_tva').value/100})});
+  lots=d.lots;P=d.parametres;$('#dlg').close();render();toast('Paramètres enregistrés')}catch(e){toast(e.message)}};
+
+// restauration
+$('#restore').onclick=()=>$('#file').click();
+$('#file').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  if(!confirm('Remplacer toutes les données actuelles par cette sauvegarde ? (une copie de sécurité est conservée)'))return;
+  const fd=new FormData();fd.append('fichier',f);
+  try{await api('/api/restaurer',{method:'POST',body:fd});toast('Sauvegarde restaurée');load()}catch(err){toast(err.message)}e.target.value=''};
+load();
+</script>
+</body>
+</html>

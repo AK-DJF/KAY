@@ -1,0 +1,57 @@
+Tommasina — Quote-part de terrain et chiffre d'affaires par lot
+================================================================
+
+Cette application reprend le tableau "Quote part terrain TOMMASINA 2025" :
+mêmes colonnes, mêmes formules, avec les données déjà chargées (78 lots + 2 mezzanines).
+
+DÉMARRAGE
+---------
+1) Installer Python 3.10+ (https://www.python.org/downloads/ ; sous Windows cocher
+   "Add python.exe to PATH").
+2) Double-cliquer sur LANCER-WINDOWS.bat (Windows) ou lancer-mac-linux.command (Mac/Linux).
+   La première fois, les dépendances s'installent seules, puis le navigateur s'ouvre sur
+   http://127.0.0.1:8001
+   (Manuelle : pip install -r requirements.txt  puis  python app.py)
+3) Laisser la fenêtre noire ouverte pendant l'utilisation ; Ctrl+C pour arrêter.
+
+CONSERVATION DES DONNÉES
+------------------------
+- Tout ce que vous saisissez est enregistré immédiatement dans le fichier  data.db
+  (à côté de app.py). Il est conservé quand vous fermez/relancez l'application.
+- Au tout premier lancement, data.db est créé à partir de seed.json (= le tableau Excel).
+- SAUVEGARDE : le bouton "Sauvegarde" télécharge une copie de la base. Faites-le
+  régulièrement et gardez le fichier ailleurs (clé USB, cloud).
+- RESTAURER : le bouton "Restaurer" recharge une sauvegarde (une copie de sécurité de
+  l'état précédent est gardée sous data.avant-restauration.db).
+- EXPORTER EXCEL : produit un .xlsx avec toutes les colonnes calculées et les totaux.
+- Pour repartir des données d'origine : fermer l'application et supprimer data.db.
+
+CALCULS (identiques au tableau)
+-------------------------------
+  Quote-part terrain (m²)   = Total avec surplomb × surface terrain / 10 000
+  Part terrain (Dhs)        = Quote-part (m²) × Prix m²
+  Prix hors part terrain    = TTC − Part terrain
+  Prix HT                   = Prix hors part terrain ÷ (1 + TVA)
+  TVA                       = Prix HT × TVA
+Paramètres (bouton "Paramètres") : surface du terrain 692 m², prix m² 18 515,25 Dhs
+(= 12 812 552,5 ÷ 692), TVA 20 %. Un lot peut avoir son propre prix m² (colonne "Prix m²") ;
+sinon le prix par défaut est utilisé.
+Un lot est "vendu" dès qu'un prix TTC est saisi. Les colonnes grisées sont calculées.
+
+NOTES SUR LA REPRISE DU TABLEAU
+-------------------------------
+- Repris : lignes 6 à 85 de la feuille "Proprieté_Tommassina" (date, client, TF, propriété,
+  indice, niveau, consistance, surfaces, TTC, encaissé). Les totaux concordent :
+  TTC 39 276 800 ; tantièmes 10 000 ; part terrain 12 812 553.
+- Non repris : les calculs de brouillon sans intitulé (colonne S/T, lignes 86-89, ex.
+  "350000/Q67") et les feuilles Feuil1/2/4, CA 2025 et CA 2026, qui sont des extraits
+  de la feuille principale. Le "CA par mois" de l'application les remplace.
+- Le lot "MEHDI" (Tommasina_60) avait des acomptes de 350 000 et 100 000 notés dans un
+  calcul de brouillon : à saisir dans "Encaissé" si besoin.
+
+DONNÉES INITIALES
+-----------------
+seed.json (données du tableau, noms de clients inclus) n'est pas versionné dans Git.
+Sans lui, l'application démarre avec une base vide ; copier seed.json à côté de app.py
+avant le premier lancement pour charger les 80 lignes. tools/make_seed.py le régénère
+depuis le fichier Excel : python tools/make_seed.py chemin/vers/le_tableau.xlsx
