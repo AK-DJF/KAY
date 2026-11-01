@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="fr" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tfoula – Maquette page d'accueil</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Nunito+Sans:wght@400;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--cream:#FAF5EE;--navy:#2E4A62;--terra:#D9886A;--sage:#A9B8A0;--ink:#2B2B2B;--line:#e8dfd2;--white:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--cream);color:var(--ink);font-family:'Nunito Sans',system-ui,sans-serif;line-height:1.55}
+html[dir=rtl] body{font-family:'Tajawal','Nunito Sans',sans-serif}
+h1,h2,h3{font-family:'Fraunces',Georgia,serif;font-weight:600;color:var(--navy);line-height:1.2}
+html[dir=rtl] h1,html[dir=rtl] h2,html[dir=rtl] h3{font-family:'Tajawal',sans-serif;font-weight:700}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1100px;margin:0 auto;padding:0 16px}
+section{padding:44px 0}
+h2{font-size:1.6rem;text-align:center;margin-bottom:24px}
+.btn{display:inline-block;background:var(--terra);color:var(--white);padding:13px 24px;border-radius:999px;font-weight:700;border:2px solid var(--terra)}
+.btn.alt{background:transparent;color:var(--navy);border-color:var(--navy)}
+.center{text-align:center;margin-top:24px}
+.announce{background:var(--navy);color:var(--cream);text-align:center;padding:8px 16px;font-size:.9rem}
+header{background:var(--white);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;max-width:1100px;margin:0 auto}
+.logo{font-family:'Fraunces',serif;font-size:1.6rem;color:var(--navy);font-weight:600}
+nav{display:flex;gap:18px;font-size:.95rem;font-weight:600;color:var(--navy);flex-wrap:wrap}
+.lang{border:1px solid var(--navy);background:none;color:var(--navy);padding:6px 12px;border-radius:999px;font-weight:700;cursor:pointer;font:inherit}
+@media(max-width:760px){nav{display:none}}
+.hero{background:linear-gradient(135deg,#efe3d2,#f7e6dc 55%,#dfe6d8);padding:56px 0}
+.hero .wrap{display:grid;gap:32px;align-items:center}
+.hero h1{font-size:2.3rem;margin-bottom:12px}
+.hero p{font-size:1.1rem;margin-bottom:24px;max-width:460px}
+.hero .btns{display:flex;gap:12px;flex-wrap:wrap}
+.ph{border-radius:20px;display:flex;align-items:center;justify-content:center;color:rgba(43,43,43,.55);font-size:.85rem;text-align:center;padding:8px}
+.hero .ph{aspect-ratio:4/3;background:var(--sage)}
+@media(min-width:760px){.hero .wrap{grid-template-columns:1fr 1fr}.hero h1{font-size:3rem}}
+.trust{background:var(--white);border-block:1px solid var(--line);padding:20px 0}
+.trust .wrap{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;text-align:center;font-weight:600;color:var(--navy);font-size:.92rem}
+@media(min-width:760px){.trust .wrap{grid-template-columns:repeat(4,1fr)}}
+.cats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.cat .ph{aspect-ratio:1/1;margin-bottom:8px;font-weight:700;color:var(--navy);font-size:1.1rem}
+.cat:nth-child(1) .ph{background:#f1d3c7}.cat:nth-child(2) .ph{background:#c9d5df}.cat:nth-child(3) .ph{background:#e6ddc9}
+.cat div:last-child{text-align:center;font-weight:700;color:var(--navy)}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+@media(min-width:760px){.grid{grid-template-columns:repeat(4,1fr)}}
+.card{background:var(--white);border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+.card .ph{aspect-ratio:3/4;border-radius:0}
+.card .in{padding:12px}
+.card h3{font-size:1rem;margin-bottom:4px}
+.price{font-weight:700;color:var(--terra)}
+.old{text-decoration:line-through;color:#888;font-weight:400;margin-inline-start:6px;font-size:.9rem}
+.sw{display:flex;gap:5px;margin-top:6px}.sw i{width:14px;height:14px;border-radius:50%;border:1px solid var(--line)}
+.eid{background:var(--navy);color:var(--cream);border-radius:24px;padding:44px 24px;text-align:center}
+.eid h2{color:var(--cream);margin-bottom:12px}.eid p{margin-bottom:20px}
+.why{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+@media(min-width:760px){.why{grid-template-columns:repeat(4,1fr)}}
+.why div{background:var(--white);border-radius:16px;padding:20px 14px;text-align:center;border:1px solid var(--line);font-weight:700;color:var(--navy)}
+.rev{display:grid;gap:16px}
+@media(min-width:760px){.rev{grid-template-columns:repeat(3,1fr)}}
+.rev blockquote{background:var(--white);border-radius:16px;padding:20px;border:1px solid var(--line)}
+.rev .st{color:var(--terra);margin-bottom:6px}.rev small{display:block;margin-top:8px;color:#777}
+.social{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.social .ph{aspect-ratio:1/1;border-radius:12px;background:var(--sage)}
+.social .ph:nth-child(2n){background:#f1d3c7}
+.news{background:var(--white);border-block:1px solid var(--line);text-align:center}
+.news form{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.news input{padding:12px 16px;border:1px solid var(--line);border-radius:999px;min-width:240px;font:inherit}
+footer{background:var(--navy);color:var(--cream);padding:32px 0;font-size:.92rem}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-between}
+.wa{position:fixed;bottom:16px;inset-inline-end:16px;background:#25D366;color:#fff;font-weight:700;padding:12px 18px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.2);z-index:9}
+.note{background:#fff7e0;border-bottom:1px solid #ecd9a0;text-align:center;font-size:.8rem;padding:5px}
+</style>
+</head>
+<body>
+<div class="note">Maquette de travail : photos, avis et chiffres sont des exemples à remplacer.</div>
+<div class="announce" data-i="announce"></div>
+<header><div class="bar">
+  <a class="logo" href="#">Tfoula</a>
+  <nav id="nav"></nav>
+  <button class="lang" id="lang" type="button">العربية</button>
+</div></header>
+
+<div class="hero"><div class="wrap">
+  <div>
+    <h1 data-i="h1"></h1>
+    <p data-i="sub"></p>
+    <div class="btns"><a class="btn" href="#" data-i="cta1"></a><a class="btn alt" href="#" data-i="cta2"></a></div>
+  </div>
+  <div class="ph" data-i="photo"></div>
+</div></div>
+
+<div class="trust"><div class="wrap" id="trust"></div></div>
+
+<section><div class="wrap">
+  <h2 data-i="catT"></h2>
+  <div class="cats" id="cats"></div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+  <h2 data-i="newT"></h2>
+  <div class="grid" id="newG"></div>
+  <div class="center"><a class="btn alt" href="#" data-i="seeAll"></a></div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+  <div class="eid"><h2 data-i="eidT"></h2><p data-i="eidP"></p><a class="btn" href="#" data-i="eidB"></a></div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+  <h2 data-i="bestT"></h2>
+  <div class="grid" id="bestG"></div>
+  <div class="center"><a class="btn" href="#" data-i="orderB"></a></div>
+</div></section>
+
+<section><div class="wrap">
+  <h2 data-i="whyT"></h2>
+  <div class="why" id="why"></div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+  <h2 data-i="revT"></h2>
+  <div class="rev" id="rev"></div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+  <h2 data-i="socT"></h2>
+  <div class="social"><div class="ph">photo</div><div class="ph">photo</div><div class="ph">photo</div></div>
+</div></section>
+
+<section class="news"><div class="wrap">
+  <h2 data-i="newsT"></h2>
+  <form onsubmit="return false"><input id="tel" type="tel"><button class="btn" data-i="newsB"></button></form>
+</div></section>
+
+<footer><div class="wrap" id="foot"></div></footer>
+<a class="wa" href="#" data-i="wa"></a>
+
+<script>
+const COL={"Beige":"#d8c7a8","Bleu nuit":"#2E4A62","Vert sauge":"#A9B8A0","Rose poudré":"#efc7bb","Ivoire":"#f5efe0","Bleu ciel":"#bcd3e6","Terracotta":"#D9886A","Crème":"#f3e9d6","Gris perle":"#cfd2d6","Rose pâle":"#f6dcdc","Blanc cassé":"#f4f1ea"};
+const P=[
+ {fr:"Ensemble sweat « Nuage »",ar:"طقم سويت «سحابة»",p:249,o:299,c:["Beige","Bleu nuit","Vert sauge"],bg:"#d8c7a8"},
+ {fr:"Robe de fête « Zahra »",ar:"فستان حفلات «زهرة»",p:349,c:["Rose poudré","Ivoire","Bleu ciel"],bg:"#efc7bb"},
+ {fr:"Djellaba enfant « Salma »",ar:"جلابة أطفال «سلمى»",p:329,c:["Terracotta","Vert sauge","Crème"],bg:"#e3b19c"},
+ {fr:"Pyjama 2 pièces « Lune »",ar:"بيجامة قطعتين «قمر»",p:179,c:["Bleu nuit","Gris perle","Rose pâle"],bg:"#c9d5df"},
+ {fr:"Jabador 3 pièces « Hamza »",ar:"جبادور 3 قطع «حمزة»",p:399,c:["Blanc cassé","Beige","Bleu nuit"],bg:"#e6ddc9"}
+];
+const T={
+fr:{dir:"ltr",lang:"العربية",
+announce:"🚚 Livraison partout au Maroc · Paiement à la livraison",
+nav:["Nouveautés","Filles","Garçons","Bébés","Fêtes & Aïd","Promos","Contact"],
+h1:"Habillez-les en douceur.",sub:"Des vêtements enfants élégants, confortables et à petits prix. Vous payez à la réception.",
+cta1:"Découvrir la collection",cta2:"Tenues de fête",photo:"Photo principale\n(enfants en tenue Tfoula)",
+trust:["💵 Paiement à la livraison","🚚 Livraison 24-72h","🔄 Échange facile 7 jours","💬 Support WhatsApp"],
+catT:"Pour qui cherchez-vous ?",cats:["Filles","Garçons","Bébés"],
+newT:"Fraîchement arrivées.",seeAll:"Voir tout",
+eidT:"Prêts pour les grands jours.",eidP:"Robes de fête, djellabas et jabadors pour l'Aïd et les mariages.",eidB:"Voir les tenues de fête",
+bestT:"Les préférées des mamans.",orderB:"Je commande",
+whyT:"Pourquoi Tfoula ?",why:["Tissus doux","Tailles fidèles","Prix justes","Service humain"],
+revT:"Elles en parlent mieux que nous.",
+rev:[["Très bonne qualité, la robe est arrivée en 2 jours. Ma fille l'adore.","Exemple · Casablanca"],["Livraison rapide et le livreur a été très poli. Je recommande.","Exemple · Rabat"],["J'ai demandé conseil pour la taille sur WhatsApp, réponse en 5 minutes.","Exemple · Marrakech"]],
+socT:"Suivez-nous @tfoula.ma",newsT:"Recevez nos nouveautés en avant-première.",newsB:"Je m'abonne",tel:"Votre numéro WhatsApp",
+foot:["© Tfoula · Maroc","À propos · Livraison · Retours · Guide des tailles · FAQ","contact@tfoula.ma"],wa:"💬 WhatsApp",dh:"DH"},
+ar:{dir:"rtl",lang:"Français",
+announce:"🚚 التوصيل لجميع مدن المغرب · الدفع عند الاستلام",
+nav:["وصل حديثاً","بنات","أولاد","رضّع","المناسبات والعيد","عروض","اتصل بنا"],
+h1:"ألبسيهم بكل حنان",sub:"ملابس أطفال أنيقة ومريحة بأسعار مناسبة. تدفعين عند الاستلام.",
+cta1:"اكتشفي المجموعة",cta2:"ملابس المناسبات",photo:"الصورة الرئيسية\n(أطفال بملابس طفولة)",
+trust:["💵 الدفع عند الاستلام","🚚 التوصيل خلال 24-72 ساعة","🔄 تبديل سهل خلال 7 أيام","💬 دعم عبر واتساب"],
+catT:"عمّن تبحثين؟",cats:["بنات","أولاد","رضّع"],
+newT:"وصل حديثاً",seeAll:"عرض الكل",
+eidT:"جاهزون للمناسبات الكبيرة",eidP:"فساتين حفلات وجلابيب وجبادورات للعيد والأعراس.",eidB:"ملابس المناسبات والعيد",
+bestT:"المفضّلة عند الأمهات",orderB:"اطلبي الآن",
+whyT:"لماذا طفولة؟",why:["أقمشة ناعمة","مقاسات دقيقة","أسعار عادلة","خدمة إنسانية"],
+revT:"آراء الزبونات",
+rev:[["جودة ممتازة، وصل الفستان في يومين. بنتي كتحبو بزاف.","مثال · الدار البيضاء"],["توصيل سريع وعامل التوصيل كان محترماً جداً. أنصح بها.","مثال · الرباط"],["سألت عن المقاس على واتساب وجاوبوني في 5 دقائق.","مثال · مراكش"]],
+socT:"تابعونا ‎@tfoula.ma",newsT:"توصلي بجديدنا قبل الجميع",newsB:"اشتراك",tel:"رقم الواتساب",
+foot:["© طفولة · المغرب","من نحن · التوصيل · الإرجاع · جدول المقاسات · الأسئلة الشائعة","contact@tfoula.ma"],wa:"💬 واتساب",dh:"درهم"}
+};
+let L="fr";
+const $=s=>document.querySelector(s);
+function card(p,t){return `<a class="card" href="#"><div class="ph" style="background:${p.bg}">photo</div><div class="in"><h3>${p[L]}</h3><div class="price">${p.p} ${t.dh}${p.o?`<span class="old">${p.o}</span>`:""}</div><div class="sw">${p.c.map(c=>`<i style="background:${COL[c]}" title="${c}"></i>`).join("")}</div></div></a>`}
+function render(){
+  const t=T[L];
+  document.documentElement.lang=L;document.documentElement.dir=t.dir;
+  document.querySelectorAll("[data-i]").forEach(e=>{const k=e.dataset.i;if(t[k]!==undefined)e.textContent=t[k]});
+  $("#lang").textContent=t.lang;$("#tel").placeholder=t.tel;
+  $("#nav").innerHTML=t.nav.map(n=>`<a href="#">${n}</a>`).join("");
+  $("#trust").innerHTML=t.trust.map(x=>`<div>${x}</div>`).join("");
+  $("#cats").innerHTML=t.cats.map(c=>`<a class="cat" href="#"><div class="ph">photo</div><div>${c}</div></a>`).join("");
+  $("#newG").innerHTML=[P[0],P[1],P[3],P[4]].map(p=>card(p,t)).join("");
+  $("#bestG").innerHTML=[P[2],P[0],P[4],P[1]].map(p=>card(p,t)).join("");
+  $("#why").innerHTML=t.why.map(x=>`<div>${x}</div>`).join("");
+  $("#rev").innerHTML=t.rev.map(r=>`<blockquote><div class="st">★★★★★</div>${r[0]}<small>${r[1]}</small></blockquote>`).join("");
+  $("#foot").innerHTML=t.foot.map(x=>`<div>${x}</div>`).join("");
+  $(".hero .ph").style.whiteSpace="pre-line";
+}
+$("#lang").onclick=()=>{L=L==="fr"?"ar":"fr";render()};
+render();
+</script>
+</body>
+</html>
