@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LMBA – Réaffectation des exports bancaires</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#1d2433;--mut:#667085;--line:#dfe3ea;--acc:#1f5eff;--ok:#c6efce;--warn:#ffeb9c;--bad:#f8cbad}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#14213d;color:#fff;padding:14px 24px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;font-weight:600}
+nav button{background:transparent;color:#cfd8ee;border:0;padding:8px 14px;font-size:14px;cursor:pointer;border-radius:6px}
+nav button.on{background:#fff;color:#14213d;font-weight:600}
+main{max-width:1280px;margin:0 auto;padding:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
+.card h2{font-size:16px;margin:0 0 12px}
+.card h2 .n{display:inline-block;background:var(--acc);color:#fff;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;font-size:12px;margin-right:8px}
+.drop{border:2px dashed #9db3e6;border-radius:10px;padding:28px;text-align:center;color:var(--mut);background:#f8faff;cursor:pointer}
+.drop.over{background:#e6eeff;border-color:var(--acc)}
+table{border-collapse:collapse;width:100%}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--mut);background:#fafbfc;position:sticky;top:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+input,select,button{font:inherit}
+input[type=text],input[type=number],select{border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:#fff;max-width:100%}
+td input[type=text]{width:100%;min-width:70px}
+button.b{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:8px 14px;cursor:pointer}
+button.b.sec{background:#fff;color:var(--acc);border:1px solid var(--acc)}
+button.b.red{background:#fff;color:#b42318;border:1px solid #f0b4ae}
+button.b:disabled{opacity:.45;cursor:default}
+button.sm{padding:3px 8px;font-size:12px}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;background:#eef1f6}
+.tag.etat{background:#e0f2fe}.tag.plan{background:#ede9fe}.tag.exp{background:#dcfce7}.tag.err{background:#fee2e2}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.mut{color:var(--mut)}
+.s-ok{background:var(--ok)}.s-verify{background:var(--warn)}.s-bad{background:var(--bad)}
+.warns{margin:10px 0 0;padding:10px 14px;background:#fff7e6;border:1px solid #ffd591;border-radius:8px}
+.warns li{margin:2px 0}
+.scroll{max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.hide{display:none}
+details{margin:8px 0}summary{cursor:pointer;font-weight:600}
+code{background:#eef1f6;padding:1px 4px;border-radius:4px}
+.inv{outline:2px solid #d92d20}
+.small{font-size:12px}
+td.mono input{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>LMBA · Réaffectation des exports bancaires</h1>
+  <nav><button id="nav-main" class="on">Traitement</button><button id="nav-rules">Règles</button></nav>
+</header>
+<main>
+
+<!-- ============ VUE TRAITEMENT ============ -->
+<div id="view-main">
+
+<section class="card">
+  <h2><span class="n">1</span>Fichiers</h2>
+  <div class="drop" id="drop">Glissez-déposez ici les exports bancaires (.xlsx), l'état des chèques et effets (CHEQUE_ET_EFFET_ETABLIS_AAAA.xlsx) et le plan comptable (plan_lmba.xls)<br><span class="small">ou cliquez pour parcourir – la nature de chaque fichier est détectée automatiquement</span>
+    <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.xlsm" class="hide"></div>
+  <div id="fileList" style="margin-top:12px"></div>
+</section>
+
+<section class="card">
+  <h2><span class="n">2</span>Banques et numéros de pièce de départ</h2>
+  <p class="mut small" style="margin-top:0">Table éditable. Laissez le « N° de pièce de départ » vide pour conserver les numéros de pièce d'origine.</p>
+  <div id="banksTbl"></div>
+  <div class="row" style="margin-top:8px"><button class="b sec sm" id="addBank">+ Ajouter une banque</button></div>
+</section>
+
+<section class="card">
+  <h2><span class="n">3</span>Traitement</h2>
+  <div class="row"><button class="b" id="runBtn" disabled>Traiter</button><span id="runInfo" class="mut"></span></div>
+  <div id="warns"></div>
+  <div id="results" style="margin-top:12px"></div>
+</section>
+
+<section class="card hide" id="reviewCard">
+  <h2><span class="n">4</span>Lignes à vérifier / non affectées</h2>
+  <div class="row" style="margin-bottom:8px">
+    <label>Afficher : <select id="revFilter"><option value="all">Jaunes et orange</option><option value="verify">Jaunes (à vérifier)</option><option value="bad">Orange (non affectées)</option></select></label>
+    <span class="mut small">Choisissez un compte (saisie libre pour rechercher dans le plan). Cochez « Mémoriser » pour enregistrer une correspondance permanente.</span>
+  </div>
+  <div class="scroll"><table id="revTbl"></table></div>
+  <details id="unkBox"><summary>Libellés sans règle</summary><div id="unkList"></div></details>
+</section>
+
+<section class="card hide" id="dlCard">
+  <h2><span class="n">5</span>Téléchargements</h2>
+  <div id="dlList" class="row"></div>
+  <details id="lblBox"><summary>Libellés rencontrés par banque (pour affiner les motifs)</summary><div id="lblList"></div></details>
+</section>
+
+</div>
+
+<!-- ============ VUE RÈGLES ============ -->
+<div id="view-rules" class="hide">
+<section class="card">
+  <h2>Import / export</h2>
+  <div class="row">
+    <button class="b sec" id="expJson">Exporter (JSON)</button>
+    <button class="b sec" id="impJsonBtn">Importer (JSON)</button><input type="file" id="impJson" accept=".json" class="hide">
+    <button class="b red" id="resetAll">Rétablir les règles par défaut</button>
+  </div>
+  <p class="mut small">Le JSON contient les banques, les règles et les correspondances manuelles. Tout est mémorisé dans ce navigateur (localStorage) ; aucune donnée n'est envoyée à un serveur.</p>
+</section>
+<section class="card">
+  <h2>Règles d'imputation <span class="mut small">(appliquées de haut en bas, la première qui correspond l'emporte ; elles ne concernent que les lignes 44970000)</span></h2>
+  <p class="small mut" style="margin-top:0">Types : <b>chq</b>/<b>eff</b> = règlement fournisseur via l'état (le dernier groupe numérique du motif est le n°) ; <b>vir</b> = « Virement {nom} » (dernier groupe = nom) ; <b>fixed</b> = compte + libellé fixes ; <b>label</b> = seul le libellé change ; <b>keep</b> = ne rien modifier. Libellé : <code>{benef}</code> <code>{n}</code> <code>{nom}</code> <code>$1</code>…<code>$9</code> (groupes du motif). Motifs : expressions régulières insensibles à la casse, testées sur le libellé en majuscules sans accents.</p>
+  <div class="scroll" style="max-height:640px"><table id="rulesTbl"></table></div>
+  <div class="row" style="margin-top:8px"><button class="b sec sm" id="addRule">+ Ajouter une règle</button></div>
+</section>
+<section class="card">
+  <h2>Correspondances manuelles (bénéficiaire / libellé → compte)</h2>
+  <table id="mapTbl"></table>
+  <div class="row" style="margin-top:8px"><button class="b sec sm" id="addMap">+ Ajouter une correspondance</button></div>
+</section>
+</div>
+
+</main>
+<datalist id="planList"></datalist>
+<script src="lib/xlsx.min.js"></script>
+<script src="lib/jszip.min.js"></script>
+<script>
+'use strict';
+/* =====================================================================
+   Utilitaires
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+const normName = s => norm(s).split(/[^A-Z0-9]+/).filter(t => t && !['STE','SARL','SA','SOCIETE'].includes(t)).join('');
+const r2 = x => Math.round(x * 100) / 100;
+const fmt = x => r2(x).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+function num(v) {
+  if (typeof v === 'number') return v;
+  if (v == null || v === '') return 0;
+  let s = String(v).replace(/[\s ]/g, '');
+  if (s.includes(',') && s.includes('.')) s = s.replace(/,/g, ''); else s = s.replace(',', '.');
+  const f = parseFloat(s); return isNaN(f) ? 0 : f;
+}
+const EPOCH = Date.UTC(1899, 11, 30);
+function toSerial(v) {
+  if (v instanceof Date) return Math.round((Date.UTC(v.getFullYear(), v.getMonth(), v.getDate()) - EPOCH) / 864e5);
+  if (typeof v === 'number') return Math.floor(v);
+  if (typeof v === 'string') {
+    const m = v.trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+    if (m) { let y = +m[3]; if (y < 100) y += 2000; return Math.round((Date.UTC(y, +m[2] - 1, +m[1]) - EPOCH) / 864e5); }
+    const m2 = v.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m2) return Math.round((Date.UTC(+m2[1], +m2[2] - 1, +m2[3]) - EPOCH) / 864e5);
+  }
+  return null;
+}
+const ymd = n => { const d = new Date(EPOCH + n * 864e5); return {y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate()}; };
+const dateStr = n => { if (n == null) return ''; const t = ymd(n); return String(t.d).padStart(2,'0') + '/' + String(t.m).padStart(2,'0') + '/' + t.y; };
+const monthKey = n => { const t = ymd(n); return String(t.m).padStart(2,'0') + '-' + t.y; };
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function lev(a, b) {
+  if (a === b) return 0; if (!a.length) return b.length; if (!b.length) return a.length;
+  let prev = Array.from({length: b.length + 1}, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+const sim = (a, b) => { const m = Math.max(a.length, b.length); return m ? 1 - lev(a, b) / m : 1; };
+const sheetKey = s => norm(s).replace(/[^A-Z0-9]/g, '');
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+/* =====================================================================
+   Configuration par défaut + persistance
+   ===================================================================== */
+const LS_KEY = 'lmba.config.v1';
+const R = (bank, type, pattern, account, label, verify, note) => ({id: uid(), active: true, bank, type, pattern, account: account || '', label: label || '', verify: !!verify, note: note || ''});
+function defaultBanks() {
+  return [
+    {code: 'ATW',   name: 'ATTIJARI', journal: 'ATW', account: '51410004', chq: 'CHQ ATW',   eff: 'EFFET ATW',   start: ''},
+    {code: 'BMCE',  name: 'BMCE',     journal: 'BQ5', account: '51410002', chq: 'CHQ BMCE',  eff: 'EFFET BMCE',  start: ''},
+    {code: 'SAHAM', name: 'SAHAM',    journal: 'BQ4', account: '51410005', chq: 'CHQ SAHAM', eff: 'EFFET SAHAM', start: ''}
+  ];
+}
+function defaultRules() {
+  const FR = 'Frais et commissions et services banquaires';
+  const NOGEN = '(?!(?:COM|FRAIS|TVA|FACTURATION|SMS|TIMBRE)|.*(?:REMISE|ENCAISS|REJET|CERTIF|RECU))';
+  return [
+    R('*', 'fixed', 'TIMBRE|TIMFISC', '61671000', "Droitesd'enregistrement et de timbre", false, '2.2a Timbres (testés en premier)'),
+    R('*', 'keep', '^(ARRETE DU COMPTE|AGIOS|FRAIS INSCRIPTION AU RNESM)', '', '', false, '2.2 Exceptions : pas de frais'),
+    R('*', 'fixed', '^VIRMAS EMIS', '44320000', 'rémunérations dues au personnel', false, '2.2c Virements de masse'),
+    R('ATW', 'chq', '^PAIEMENT CHEQUE N (?:[A-Z]{3} )?0*(\\d+)$', '', '{benef} CH N° {n}', false, '2.1 ATW chèques'),
+    R('ATW', 'eff', '^REGLEMENT LCN N 0*(\\d+)$', '', '{benef} LCN N° {n}', false, '2.1 ATW effets'),
+    R('ATW', 'vir', '^VIR(\\.| AG| INST| SRBM)? ?EMIS (WEB )?VERS (.+)$', '', 'Virement {nom}', false, '2.1 ATW virements émis'),
+    R('BMCE', 'chq', '^PAIEMENT DE VOTRE CHEQUE NUMERO 0*(\\d+)$', '', '{benef} CH N° {n}', false, '2.1 BMCE chèques'),
+    R('BMCE', 'eff', '^PAIEMENT DE VOTRE LCN RECUE INTER (BANQUE|AGENCE) NUMERO 0*(\\d+)$', '', '{benef} LCN N° {n}', false, '2.1 BMCE effets'),
+    R('SAHAM', 'chq', '^' + NOGEN + '.*?(?:CHEQUE|CHQ)\\D*0*(\\d{5,})', '', '{benef} CH N° {n}', false, '2.1 SAHAM chèques (motif générique – à affiner)'),
+    R('SAHAM', 'eff', '^' + NOGEN + '.*?(?:LCN|EFFET)\\D*0*(\\d{5,})', '', '{benef} LCN N° {n}', false, '2.1 SAHAM effets (motif générique – à affiner)'),
+    R('*', 'vir', '^(?!COM|FRAIS|TVA|FACTURATION|SMS|REJET).*\\bVIR.*?\\b(?:EMIS|VERS)\\b\\s+(?:(?:WEB|VERS)\\s+)*(.+)$', '', 'Virement {nom}', false, '2.1 Virements émis (toutes banques)'),
+    R('ATW', 'fixed', '^(COM & FRAIS|COMMISSION PRELEVEMENT DGI|FACTURATION VIREMENT DU|COMMISSION CAUTION|FRAIS RELEVE CAUTION|COMMISSION TRAITEMENT DEPASSEMENT|OPERATION AU DEBIT REF : C\\.PME|SMS SUPLM|COMM VIR|FRAIS POUR CERTIFICATION CHEQUE)', '61473000', FR, false, '2.2b Frais ATW'),
+    R('BMCE', 'fixed', '^(COMMISSION DE PAIEMENT DE VOTRE LCN|TVA SUR COMMISSION|COMMISSION SUR PRELEVEMENT|TVA SUR FRAIS|FRAIS H\\.?T BAD E-BANKING|TVA / FRAIS|COMMISSION CAUTION|FRAIS COURRIER CAUTION|FRAIS TVA|COMMISSION REMISE|COMMISSION IMPAYE|TVA COMMISSION|COMMISSION SUR VIREMENT|FRAIS ECHELLE|FRAIS T\\.?COMPTE|COMMI)', '61473000', FR, false, '2.2b Frais BMCE'),
+    R('*', 'fixed', '^(COM\\b|COMM|FRAIS|TVA SUR COM|TVA SUR FRAIS|TVA / FRAIS|FACTURATION|SMS)', '61473000', FR, true, '2.2b Règle générale (toutes banques) – à vérifier'),
+    R('*', 'keep', '^PRELEVEMENT EN FAV\\.?\\s*CNSS', '', '', false, '2.3 CNSS : libellé inchangé'),
+    R('*', 'label', '^PRELEVEMENT EN FAV\\.?\\s*(.+)$', '', '$1', false, '2.3 Prélèvement en faveur de X'),
+    R('*', 'label', '^PRELEVEMENT A005 ECH', '', 'PRELEVEMENT A005 ECH', false, '2.3 Prélèvement A005'),
+    R('*', 'keep', '^(VIR[A-Z. ]*RECU DE|VIREMENT RECU DE|ENCAISSEMENT DE|REMISE CHEQUE|REGLEMENT REMISE|REJET VIREMENT|CERTIFICATION CHEQUE)', '', '', false, '2.4 Encaissements, rejets : ne pas modifier')
+  ];
+}
+function defaultMaps() {
+  const L = '44110011';
+  return ['LOYER ATELIER BENSNAH ABDELKADER','LOYER BUREAU SIHAM','MR BENSNAH LOYER','LOYER ATELIER','LOYER BUREAU','SIHAM MESNAN LOYER BUREAU']
+    .map(n => ({name: n, account: L}))
+    .concat([{name: "RSB PARTNER'S", account: '44110862'}, {name: 'TUBE ET PROFIL', account: '44110214'}]);
+}
+let CFG;
+function loadCfg() {
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
+  CFG = (c && c.banks && c.rules && c.maps) ? c : {banks: defaultBanks(), rules: defaultRules(), maps: defaultMaps()};
+}
+function saveCfg() { try { localStorage.setItem(LS_KEY, JSON.stringify(CFG)); } catch (e) {} }
+loadCfg();
+
+/* =====================================================================
+   État applicatif
+   ===================================================================== */
+const S = {files: [], plan: null, results: null, overrides: new Map(), warns: []};
+
+/* =====================================================================
+   Lecture des fichiers
+   ===================================================================== */
+const sheetRows = ws => XLSX.utils.sheet_to_json(ws, {header: 1, raw: true, defval: null, blankrows: false});
+
+function parseEtat(wb) {
+  const out = {};
+  for (const sn of wb.SheetNames) {
+    const rows = sheetRows(wb.Sheets[sn]);
+    const hi = rows.slice(0, 40).findIndex(r => r.some(c => c != null && norm(c).includes('BENIFICAIRE/LIBELLE')));
+    if (hi < 0) continue;
+    const h = rows[hi].map(norm);
+    const cB = h.findIndex(x => x.includes('BENIFICAIRE'));
+    let cD = h.findIndex(x => x === 'DATE');
+    let cN = h.findIndex(x => (x.includes('CHEQUE') || x.includes('EFFET')) && !x.includes('ECHEANCE'));
+    let cM = h.findIndex(x => x.includes('MONTANT'));
+    if (cN < 0) cN = cB + 3; if (cM < 0) cM = cB + 4; if (cD < 0) cD = cB + 1;
+    const map = new Map(); let count = 0;
+    for (const r of rows.slice(hi + 1)) {
+      if (r.some(c => c != null && norm(c).includes('ANNULER'))) continue;
+      const benef = String(r[cB] ?? '').replace(/\s+/g, ' ').trim();
+      const n = String(r[cN] ?? '').replace(/\D/g, '').replace(/^0+/, '');
+      if (!benef && !n) continue;
+      if (!n) continue;
+      const rec = {benef, amount: num(r[cM]), date: toSerial(r[cD]), sheet: sn};
+      if (!map.has(n)) map.set(n, []);
+      map.get(n).push(rec); count++;
+    }
+    out[sheetKey(sn)] = {name: sn, map, count};
+  }
+  return out;
+}
+function parseExport(wb) {
+  for (const sn of wb.SheetNames) {
+    const rows = sheetRows(wb.Sheets[sn]);
+    const hi = rows.slice(0, 20).findIndex(r => r.some(c => norm(c) === 'JRL') && r.some(c => norm(c).startsWith('DATE')));
+    if (hi < 0) continue;
+    const hdrRaw = rows[hi];
+    const h = hdrRaw.map(c => norm(c));
+    const find = (pred, dflt) => { const i = h.findIndex(pred); return i >= 0 ? i : dflt; };
+    const C = {
+      jrl: find(x => x === 'JRL', 0), date: find(x => x.startsWith('DATE'), 1), piece: find(x => x.startsWith('PIECE'), 2),
+      acc: find(x => x.includes('COMPTE'), 3), label: find(x => x.startsWith('NOM'), 4), d: find(x => x.startsWith('DEBIT'), 5),
+      c: find(x => x.startsWith('CREDIT'), 6), fact: find(x => x.includes('FACTURE'), 7)
+    };
+    const hdr = [C.jrl, C.date, C.piece, C.acc, C.label, C.d, C.c, C.fact].map((ci, k) => hdrRaw[ci] ?? ['Jrl','Date Fact.','Pièce','N° Compte','Nom client','Débit','Crédit','N° Facture'][k]);
+    const out = [];
+    rows.slice(hi + 1).forEach((r, i) => {
+      if (r.every(c => c == null || c === '')) return;
+      const acc = String(r[C.acc] ?? '').trim();
+      if (!acc) return;
+      out.push({idx: i, jrl: String(r[C.jrl] ?? '').trim(), date: toSerial(r[C.date]), piece: r[C.piece], acc, rawAcc: r[C.acc],
+        label: String(r[C.label] ?? ''), d: num(r[C.d]), c: num(r[C.c]), rawD: r[C.d], rawC: r[C.c], fact: r[C.fact]});
+    });
+    return {rows: out, hdr, sheet: sn};
+  }
+  return null;
+}
+function parsePlan(wb) {
+  const rows = sheetRows(wb.Sheets[wb.SheetNames[0]]);
+  const accs = new Map();
+  for (const r of rows) {
+    const a = String(r[0] ?? '').trim();
+    if (/^\d{4,}$/.test(a)) accs.set(a, String(r[2] ?? '').replace(/\s+/g, ' ').trim());
+  }
+  return accs.size >= 5 ? accs : null;
+}
+function detectBank(rows) {
+  const cnt = {};
+  for (const b of CFG.banks) cnt[b.code] = 0;
+  for (const r of rows) for (const b of CFG.banks) {
+    if (b.journal && r.jrl.toUpperCase() === b.journal.toUpperCase()) cnt[b.code]++;
+    else if (b.account && r.acc === b.account) cnt[b.code]++;
+  }
+  const best = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0];
+  return best && best[1] > 0 ? best[0] : '';
+}
+function majorityMonth(rows) {
+  const c = {};
+  for (const r of rows) if (r.date != null) { const k = monthKey(r.date); c[k] = (c[k] || 0) + 1; }
+  const e = Object.entries(c).sort((a, b) => b[1] - a[1]);
+  return {month: e[0] ? e[0][0] : '', multi: e.length > 1};
+}
+async function addFiles(list) {
+  for (const f of list) {
+    const rec = {id: uid(), name: f.name, kind: 'inconnu', msg: ''};
+    try {
+      const wb = XLSX.read(await f.arrayBuffer(), {type: 'array'});
+      const et = parseEtat(wb);
+      if (Object.keys(et).length) { rec.kind = 'etat'; rec.etat = et; rec.msg = Object.values(et).map(s => `${s.name} (${s.count})`).join(', '); }
+      else {
+        const ex = parseExport(wb);
+        if (ex && ex.rows.length) {
+          rec.kind = 'export'; rec.ex = ex; rec.bank = detectBank(ex.rows);
+          const m = majorityMonth(ex.rows); rec.month = m.month; rec.multi = m.multi;
+          rec.minDate = Math.min(...ex.rows.map(r => r.date ?? 1e9));
+        } else {
+          const pl = parsePlan(wb);
+          if (pl) { rec.kind = 'plan'; rec.plan = pl; rec.msg = pl.size + ' comptes'; }
+        }
+      }
+    } catch (e) { rec.msg = 'Lecture impossible : ' + e.message; }
+    S.files.push(rec);
+  }
+  S.results = null;
+  refreshPlan(); renderFiles(); renderResults();
+}
+function refreshPlan() {
+  const p = S.files.filter(f => f.kind === 'plan').pop();
+  S.plan = p ? p.plan : null;
+  const dl = $('#planList');
+  dl.innerHTML = S.plan ? [...S.plan].map(([a, n]) => `<option value="${esc(a)} – ${esc(n)}"></option>`).join('') : '';
+}
+
+/* =====================================================================
+   Appariement des écritures
+   ===================================================================== */
+function pairRows(rows) {
+  const isBank = r => /^514/.test(r.acc);
+  const opp = (a, b) => Math.abs(a.d - b.c) < 0.005 && Math.abs(a.c - b.d) < 0.005;
+  const used = new Set(), pairs = [];
+  const mk = (a, b) => { used.add(a); used.add(b); const bank = isBank(a) ? a : b, cp = bank === a ? b : a; pairs.push({bank, cp}); };
+  // 1) lignes consécutives
+  for (let i = 0; i + 1 < rows.length; i++) {
+    const a = rows[i], b = rows[i + 1];
+    if (used.has(a) || used.has(b)) continue;
+    if (isBank(a) !== isBank(b) && a.date === b.date && norm(a.label) === norm(b.label) && opp(a, b)) { mk(a, b); i++; }
+  }
+  // 2) regroupement (date, libellé), puis 3) (date, montant opposé)
+  const rest = () => rows.filter(r => !used.has(r));
+  for (const pass of [0, 1]) {
+    const banks = rest().filter(isBank), cps = rest().filter(r => !isBank(r));
+    for (const a of banks) {
+      const b = cps.find(c => !used.has(c) && opp(a, c) && c.date === a.date && (pass === 1 || norm(c.label) === norm(a.label)));
+      if (b) mk(a, b);
+    }
+  }
+  // 4) orphelines
+  const orphans = rest().map(r => isBank(r) ? {bank: r, cp: null} : {bank: null, cp: r});
+  const all = pairs.concat(orphans);
+  all.forEach(p => { p.first = Math.min(p.bank ? p.bank.idx : 1e9, p.cp ? p.cp.idx : 1e9); });
+  all.sort((x, y) => x.first - y.first);
+  return all;
+}
+
+/* =====================================================================
+   Moteur de règles
+   ===================================================================== */
+const rank = {none: 0, ok: 1, verify: 2, bad: 3};
+const worst = (a, b) => rank[b] > rank[a] ? b : a;
+function lastNumericGroup(m) { for (let i = m.length - 1; i >= 1; i--) if (m[i] != null && /^\d+$/.test(m[i])) return m[i]; return ''; }
+function lastGroup(m) { for (let i = m.length - 1; i >= 1; i--) if (m[i] != null && m[i] !== '') return m[i]; return ''; }
+function tpl(t, m, vars) {
+  return String(t || '').replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] != null ? vars[k] : '')).replace(/\$(\d)/g, (_, d) => m[+d] ?? '').replace(/\s+/g, ' ').trim();
+}
+function makeCtx(etats) {
+  const re = new Map(), bad = [];
+  for (const r of CFG.rules) { try { re.set(r.id, new RegExp(r.pattern, 'i')); } catch (e) { bad.push(r.pattern); } }
+  const sup = S.plan ? [...S.plan].filter(([a]) => a.startsWith('4411')).map(([a, n]) => ({acc: a, name: n, n: normName(n)})) : [];
+  return {re, bad, etats, sup, supCache: new Map()};
+}
+function findEtat(ctx, bank, kind, n, amount) {
+  const wanted = sheetKey(kind === 'chq' ? bank.chq : bank.eff);
+  const pick = (recs) => recs.find(x => Math.abs(x.amount - amount) <= 0.01) || recs[0];
+  let recs = ctx.etats[wanted] && ctx.etats[wanted].map.get(n);
+  if (recs) return {rec: pick(recs), other: null};
+  for (const k of Object.keys(ctx.etats)) { const rr = ctx.etats[k].map.get(n); if (rr) return {rec: pick(rr), other: ctx.etats[k].name}; }
+  return null;
+}
+function matchSupplier(ctx, benef) {
+  if (ctx.supCache.has(benef)) return ctx.supCache.get(benef);
+  const nb = normName(benef);
+  let res;
+  const mp = CFG.maps.find(m => normName(m.name) === nb && nb);
+  if (mp) res = {status: 'ok', account: mp.account, name: (S.plan && S.plan.get(mp.account)) || mp.name, remark: ''};
+  else if (!S.plan) res = {status: 'bad', account: '', name: '', remark: 'Plan comptable non chargé'};
+  else if (!nb) res = {status: 'bad', account: '', name: '', remark: 'Bénéficiaire vide'};
+  else {
+    let best = null, bs = -1, inc = null, incS = -1;
+    for (const s of ctx.sup) {
+      const v = sim(nb, s.n);
+      if (v > bs) { bs = v; best = s; }
+      if (s.n && Math.min(s.n.length, nb.length) >= 5 && (s.n.includes(nb) || nb.includes(s.n)) && v > incS) { incS = v; inc = s; }
+    }
+    if (best && bs >= 0.9) res = {status: 'ok', account: best.acc, name: best.name, remark: bs < 1 ? `Rapproché de « ${best.name} » (similarité ${bs.toFixed(2)})` : ''};
+    else if (inc) res = {status: 'verify', account: inc.acc, name: inc.name, remark: `Nom inclus dans « ${inc.name} » – à vérifier`};
+    else res = {status: 'bad', account: '', name: '', remark: 'Fournisseur absent du plan – compte à créer' + (best ? ` (plus proche : « ${best.name} »)` : '')};
+  }
+  ctx.supCache.set(benef, res);
+  return res;
+}
+function classify(e, bank, ctx) {
+  const raw = String(e.cp.label ?? '');
+  const base = {newLabel: raw, account: e.cp.acc, accountName: S.plan ? (S.plan.get(e.cp.acc) || '') : '', benef: '', remark: '', status: 'none', ruleId: null, unknown: false};
+  if (e.cp.acc !== '44970000') return base;
+  const L = norm(raw);
+  const amount = Math.max(e.cp.d, e.cp.c);
+  for (const r of CFG.rules) {
+    if (!r.active || (r.bank !== '*' && r.bank !== bank.code)) continue;
+    const re = ctx.re.get(r.id); if (!re) continue;
+    const m = L.match(re); if (!m) continue;
+    base.ruleId = r.id;
+    switch (r.type) {
+      case 'keep': return base;
+      case 'label': base.newLabel = tpl(r.label, m); base.status = 'ok'; base.remark = 'Libellé modifié (compte 44970000 conservé)'; return base;
+      case 'fixed':
+        base.newLabel = tpl(r.label, m) || raw; base.account = r.account || base.account;
+        base.accountName = (S.plan && S.plan.get(base.account)) || ''; base.status = r.verify ? 'verify' : 'ok';
+        base.remark = r.verify ? 'Libellé capté par la règle générale – à vérifier' : ''; return base;
+      case 'vir': {
+        const nom = lastGroup(m).trim();
+        base.newLabel = tpl(r.label, m, {nom}); base.benef = ''; base.status = 'ok'; base.remark = 'Virement (compte 44970000 conservé)'; return base;
+      }
+      case 'chq': case 'eff': {
+        const n = lastNumericGroup(m).replace(/^0+/, '');
+        const hasEtat = Object.keys(ctx.etats).length > 0;
+        const found = hasEtat && n ? findEtat(ctx, bank, r.type, n, amount) : null;
+        if (!found) { base.status = 'bad'; base.remark = hasEtat ? "N° introuvable dans l'état" : "État des chèques et effets non chargé"; base.benef = ''; return base; }
+        const {rec, other} = found;
+        base.benef = rec.benef; base.newLabel = tpl(r.label, m, {benef: rec.benef, n});
+        let st = 'ok'; const rem = [];
+        if (other) { st = worst(st, 'verify'); rem.push(`N° trouvé dans l'onglet « ${other} » au lieu de « ${r.type === 'chq' ? bank.chq : bank.eff} »`); }
+        if (Math.abs(rec.amount - amount) > 0.01) { st = worst(st, 'verify'); rem.push(`Montant état ${fmt(rec.amount)} ≠ banque ${fmt(amount)}`); }
+        const sp = matchSupplier(ctx, rec.benef);
+        st = worst(st, sp.status); if (sp.remark) rem.push(sp.remark);
+        if (sp.account) { base.account = sp.account; base.accountName = sp.name; }
+        base.status = st; base.remark = rem.join(' · '); return base;
+      }
+    }
+  }
+  // Aucun motif : correspondance mémorisée sur le libellé ?
+  const mp = CFG.maps.find(m => normName(m.name) === normName(raw) && normName(raw));
+  if (mp) { base.account = mp.account; base.accountName = (S.plan && S.plan.get(mp.account)) || mp.name; base.status = 'ok'; base.remark = 'Correspondance mémorisée'; return base; }
+  base.status = 'bad'; base.unknown = true; base.remark = 'Libellé sans règle'; return base;
+}
+
+/* =====================================================================
+   Traitement
+   ===================================================================== */
+function run() {
+  const warns = [];
+  const exports = S.files.filter(f => f.kind === 'export');
+  if (!exports.length) return;
+  const etats = {};
+  for (const f of S.files.filter(f => f.kind === 'etat')) for (const [k, v] of Object.entries(f.etat)) {
+    if (!etats[k]) etats[k] = {name: v.name, map: new Map(), count: 0};
+    for (const [n, recs] of v.map) { if (!etats[k].map.has(n)) etats[k].map.set(n, []); etats[k].map.get(n).push(...recs); }
+    etats[k].count += v.count;
+  }
+  const ctx = makeCtx(etats);
+  if (ctx.bad.length) warns.push('Motifs invalides ignorés : ' + ctx.bad.join(' ; '));
+  if (!S.files.some(f => f.kind === 'etat')) warns.push("Aucun état des chèques et effets chargé : les règlements par chèque/effet resteront non affectés.");
+  if (!S.plan) warns.push("Aucun plan comptable chargé : les fournisseurs ne pourront pas être affectés.");
+
+  const order = exports.slice().sort((a, b) => (a.minDate - b.minDate) || a.name.localeCompare(b.name));
+  const counters = {}; const nextFree = {};
+  for (const b of CFG.banks) { const n = parseInt(b.start, 10); counters[b.code] = isNaN(n) ? null : n; }
+  const results = [];
+  for (const f of order) {
+    const bank = CFG.banks.find(b => b.code === f.bank);
+    if (!bank) { warns.push(`« ${f.name} » : banque non détectée – choisissez-la dans la liste.`); continue; }
+    const entries = pairRows(f.ex.rows).map((p, i) => ({p, key: f.id + ':' + p.first, fileId: f.id}));
+    const res = {file: f, bank, month: f.month, entries: [], stats: {total: 0, ok: 0, verify: 0, bad: 0, none: 0}, rangeLabel: '—', totalD: 0, totalC: 0};
+    for (const en of entries) {
+      const p = en.p;
+      if (!p.cp || !p.bank) {
+        warns.push(`« ${f.name} » : ligne non appariée (${dateStr((p.bank || p.cp).date)} – ${(p.bank || p.cp).label} – compte ${(p.bank || p.cp).acc})`);
+        en.cp = p.cp || {acc: '', label: '', d: 0, c: 0, date: p.bank.date, idx: -1, jrl: p.bank.jrl};
+        en.bk = p.bank; if (!p.bank) en.bk = null;
+        en.orphan = true;
+      } else { en.cp = p.cp; en.bk = p.bank; }
+      const cl = p.cp ? classify({cp: p.cp, bk: p.bank}, bank, ctx) : {newLabel: p.bank.label, account: '', accountName: '', benef: '', remark: 'Ligne non appariée', status: 'bad', ruleId: null, unknown: false};
+      Object.assign(en, cl);
+      const ov = S.overrides.get(en.key);
+      if (ov) { en.account = ov.account; en.accountName = ov.name; en.status = 'ok'; en.remark = (en.remark ? en.remark + ' · ' : '') + 'Choix manuel'; en.manual = true; }
+      en.date = (p.bank || p.cp).date; en.origLabel = String((p.cp || p.bank).label ?? '');
+      en.amount = r2(Math.max(p.cp ? Math.max(p.cp.d, p.cp.c) : 0, p.bank ? Math.max(p.bank.d, p.bank.c) : 0));
+      en.sheetName = f.name; en.bankCode = bank.code;
+      en.changed = en.newLabel !== en.origLabel || (p.cp && en.account !== p.cp.acc);
+      res.entries.push(en);
+      res.stats.total++; res.stats[en.status]++;
+      for (const l of [p.cp, p.bank]) if (l) { res.totalD += l.d; res.totalC += l.c; }
+      const sd = (p.cp ? p.cp.d : 0) + (p.bank ? p.bank.d : 0), sc = (p.cp ? p.cp.c : 0) + (p.bank ? p.bank.c : 0);
+      if (Math.abs(sd - sc) > 0.005 && !en.orphan) warns.push(`« ${f.name} » : écriture déséquilibrée (${dateStr(en.date)} – ${en.origLabel}) : débit ${fmt(sd)} / crédit ${fmt(sc)}`);
+    }
+    // numérotation
+    if (counters[bank.code] != null) {
+      const first = counters[bank.code];
+      for (const en of res.entries) en.piece = counters[bank.code]++;
+      res.rangeLabel = res.entries.length ? `${first} → ${counters[bank.code] - 1}` : '—';
+      nextFree[bank.code] = counters[bank.code];
+    }
+    if (Math.abs(res.totalD - res.totalC) > 0.005) warns.push(`« ${f.name} » : total débit ${fmt(res.totalD)} ≠ total crédit ${fmt(res.totalC)}`);
+    if (f.multi) warns.push(`« ${f.name} » : le fichier couvre plusieurs mois (mois retenu : ${f.month}).`);
+    results.push(res);
+  }
+  // doublons entre fichiers
+  const seen = new Map();
+  for (const res of results) for (const en of res.entries) {
+    const k = [en.bankCode, en.date, norm(en.origLabel), en.amount].join('|');
+    if (seen.has(k) && seen.get(k) !== res.file.id) {
+      const other = seen.get(k);
+      warns.push(`Doublon possible entre fichiers : ${dateStr(en.date)} – ${en.origLabel} – ${fmt(en.amount)} (« ${res.file.name} » et « ${results.find(r => r.file.id === other).file.name} »)`);
+      en.remark = (en.remark ? en.remark + ' · ' : '') + 'Doublon possible entre fichiers';
+    } else if (!seen.has(k)) seen.set(k, res.file.id);
+  }
+  S.results = {list: results, nextFree};
+  S.warns = warns;
+  renderResults();
+}
+
+/* =====================================================================
+   Export Excel
+   ===================================================================== */
+const FILL = {ok: 'C6EFCE', verify: 'FFEB9C', bad: 'F8CBAD'};
+const stl = st => FILL[st] ? {fill: {patternType: 'solid', fgColor: {rgb: FILL[st]}}} : undefined;
+function fileNameOf(res) { return `Export_${res.bank.code}_${res.month || 'XX-XXXX'}_reaffecte.xlsx`; }
+async function buildXlsx(res) {
+  const wb = XLSX.utils.book_new();
+  const H = {font: {bold: true}, fill: {patternType: 'solid', fgColor: {rgb: 'D9E1F2'}}, border: {bottom: {style: 'thin', color: {rgb: '808080'}}}};
+  // --- Feuil1
+  const ws = {}; let r = 0;
+  const put = (ws, r, c, v, o = {}) => {
+    if (v === null || v === undefined || v === '') { if (!o.s) return; v = ''; }
+    const cell = {v, t: typeof v === 'number' ? 'n' : 's'};
+    if (o.z) cell.z = o.z; if (o.s) cell.s = JSON.parse(JSON.stringify(o.s)); // copie : la bibliothèque modifie l'objet de style
+    ws[XLSX.utils.encode_cell({r, c})] = cell;
+  };
+  res.file.ex.hdr.forEach((h, c) => put(ws, 0, c, String(h), {s: H}));
+  r = 1;
+  const accVal = (acc, raw) => (typeof raw === 'number' && /^\d+$/.test(acc)) ? Number(acc) : acc;
+  for (const en of res.entries) {
+    const s = stl(en.status);
+    for (const kind of ['cp', 'bk']) {
+      const l = kind === 'cp' ? en.p.cp : en.p.bank; if (!l) continue;
+      const isCp = kind === 'cp';
+      const label = isCp ? en.newLabel : (en.p.cp ? en.newLabel : l.label);
+      const acc = isCp ? en.account : l.acc;
+      const piece = en.piece != null ? en.piece : l.piece;
+      put(ws, r, 0, l.jrl, {s}); put(ws, r, 1, l.date, {z: 'dd/mm/yyyy', s}); put(ws, r, 2, piece, {s});
+      put(ws, r, 3, accVal(acc, l.rawAcc), {s}); put(ws, r, 4, label, {s});
+      put(ws, r, 5, l.rawD == null || l.rawD === '' ? null : l.d, {z: '#,##0.00', s}); put(ws, r, 6, l.rawC == null || l.rawC === '' ? null : l.c, {z: '#,##0.00', s});
+      put(ws, r, 7, l.fact, {s});
+      r++;
+    }
+  }
+  ws['!ref'] = XLSX.utils.encode_range({s: {r: 0, c: 0}, e: {r: Math.max(r - 1, 0), c: 7}});
+  ws['!cols'] = [{wch: 7}, {wch: 12}, {wch: 8}, {wch: 12}, {wch: 52}, {wch: 14}, {wch: 14}, {wch: 14}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Feuil1');
+  // --- Contrôle
+  const wc = {}; const hd = ['Date', "Libellé d'origine", 'Nouveau libellé', 'Bénéficiaire (état)', 'Compte affecté', 'Intitulé plan', 'Montant', 'Remarque'];
+  hd.forEach((h, c) => put(wc, 0, c, h, {s: H}));
+  res.entries.forEach((en, i) => {
+    const s = stl(en.status), rr = i + 1;
+    put(wc, rr, 0, en.date, {z: 'dd/mm/yyyy', s}); put(wc, rr, 1, en.origLabel, {s}); put(wc, rr, 2, en.newLabel, {s}); put(wc, rr, 3, en.benef, {s});
+    put(wc, rr, 4, en.account, {s}); put(wc, rr, 5, en.accountName, {s}); put(wc, rr, 6, en.amount, {z: '#,##0.00', s}); put(wc, rr, 7, en.remark, {s});
+  });
+  wc['!ref'] = XLSX.utils.encode_range({s: {r: 0, c: 0}, e: {r: Math.max(res.entries.length, 0), c: 7}});
+  wc['!cols'] = [{wch: 12}, {wch: 48}, {wch: 48}, {wch: 34}, {wch: 14}, {wch: 34}, {wch: 14}, {wch: 60}];
+  XLSX.utils.book_append_sheet(wb, wc, 'Contrôle');
+  const buf = XLSX.write(wb, {bookType: 'xlsx', type: 'array'});
+  // en-tête figé (non géré par la bibliothèque) : on retouche le XML
+  const zip = await JSZip.loadAsync(buf);
+  for (const p of Object.keys(zip.files).filter(n => /^xl\/worksheets\/sheet\d+\.xml$/.test(n))) {
+    let x = await zip.file(p).async('string');
+    const view = '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft"/></sheetView></sheetViews>';
+    if (/<sheetViews>/.test(x)) x = x.replace(/<sheetViews>[\s\S]*?<\/sheetViews>/, view);
+    else if (/<dimension[^>]*\/>/.test(x)) x = x.replace(/(<dimension[^>]*\/>)/, '$1' + view);
+    else x = x.replace(/(<worksheet[^>]*>)/, '$1' + view);
+    zip.file(p, x);
+  }
+  return zip.generateAsync({type: 'uint8array', compression: 'DEFLATE'});
+}
+function saveBlob(data, name, type) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], {type}));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const XTYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+async function dlOne(i) { const res = S.results.list[i]; saveBlob(await buildXlsx(res), fileNameOf(res), XTYPE); }
+async function dlZip() {
+  const z = new JSZip();
+  for (const res of S.results.list) z.file(fileNameOf(res), await buildXlsx(res));
+  saveBlob(await z.generateAsync({type: 'uint8array'}), 'Exports_LMBA_reaffectes.zip', 'application/zip');
+}
+
+/* =====================================================================
+   Rendu – vue Traitement
+   ===================================================================== */
+function renderFiles() {
+  const el = $('#fileList');
+  if (!S.files.length) { el.innerHTML = ''; $('#runBtn').disabled = true; return; }
+  const kind = {export: ['exp', 'Export bancaire'], etat: ['etat', 'État chèques/effets'], plan: ['plan', 'Plan comptable'], inconnu: ['err', 'Non reconnu']};
+  el.innerHTML = '<table><tr><th>Fichier</th><th>Nature</th><th>Banque</th><th>Mois</th><th>Détail</th><th></th></tr>' + S.files.map(f => {
+    const [cls, lab] = kind[f.kind];
+    const bankSel = f.kind === 'export' ? `<select data-bank="${f.id}"><option value="">— ?</option>${CFG.banks.map(b => `<option value="${esc(b.code)}"${b.code === f.bank ? ' selected' : ''}>${esc(b.code)}</option>`).join('')}</select>` : '';
+    const det = f.kind === 'export' ? `${f.ex.rows.length} lignes` : esc(f.msg);
+    return `<tr><td>${esc(f.name)}</td><td><span class="tag ${cls}">${lab}</span></td><td>${bankSel}</td><td>${esc(f.month || '')}</td><td class="mut">${det}</td><td><button class="b red sm" data-rm="${f.id}">Retirer</button></td></tr>`;
+  }).join('') + '</table>';
+  $('#runBtn').disabled = !S.files.some(f => f.kind === 'export');
+  el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { S.files = S.files.filter(f => f.id !== b.dataset.rm); S.results = null; refreshPlan(); renderFiles(); renderResults(); });
+  el.querySelectorAll('[data-bank]').forEach(s => s.onchange = () => { S.files.find(f => f.id === s.dataset.bank).bank = s.value; S.results = null; renderResults(); });
+}
+function renderBanks() {
+  const rows = CFG.banks.map((b, i) => `<tr>${['code','name','journal','account','chq','eff'].map(k => `<td><input type="text" data-bk="${i}:${k}" value="${esc(b[k])}"></td>`).join('')}
+    <td><input type="text" data-bk="${i}:start" value="${esc(b.start)}" inputmode="numeric" placeholder="ex. 439"></td><td><button class="b red sm" data-bdel="${i}">✕</button></td></tr>`).join('');
+  $('#banksTbl').innerHTML = `<table><tr><th>Code</th><th>Banque</th><th>Journal</th><th>Compte banque</th><th>Onglet chèques</th><th>Onglet effets</th><th>N° de pièce de départ</th><th></th></tr>${rows}</table>`;
+  $('#banksTbl').querySelectorAll('[data-bk]').forEach(inp => inp.onchange = () => { const [i, k] = inp.dataset.bk.split(':'); CFG.banks[+i][k] = inp.value.trim(); saveCfg(); S.results = null; renderResults(); });
+  $('#banksTbl').querySelectorAll('[data-bdel]').forEach(b => b.onclick = () => { CFG.banks.splice(+b.dataset.bdel, 1); saveCfg(); renderBanks(); renderFiles(); });
+}
+function renderResults() {
+  const R_ = S.results;
+  $('#warns').innerHTML = ''; $('#results').innerHTML = '';
+  ['#reviewCard', '#dlCard'].forEach(s => $(s).classList.toggle('hide', !R_));
+  if (!R_) return;
+  if (S.warns.length) $('#warns').innerHTML = `<ul class="warns">${S.warns.map(w => `<li>${esc(w)}</li>`).join('')}</ul>`;
+  const t = R_.list.map((res, i) => {
+    const s = res.stats, bal = Math.abs(res.totalD - res.totalC) <= 0.005;
+    return `<tr><td>${esc(fileNameOf(res))}</td><td>${esc(res.bank.code)}</td><td>${esc(res.month)}</td><td class="num">${s.total}</td><td class="num s-ok">${s.ok}</td><td class="num s-verify">${s.verify}</td><td class="num s-bad">${s.bad}</td><td class="num">${s.none}</td><td>${esc(res.rangeLabel)}</td><td>${bal ? '✓ ' : '✗ '}${fmt(res.totalD)} / ${fmt(res.totalC)}</td></tr>`;
+  }).join('');
+  const nf = Object.entries(R_.nextFree).map(([b, n]) => `<b>${esc(b)}</b> : ${n}`).join(' · ');
+  $('#results').innerHTML = `<table><tr><th>Fichier</th><th>Banque</th><th>Mois</th><th class="num">Écritures</th><th class="num">Affectées</th><th class="num">À vérifier</th><th class="num">Non affectées</th><th class="num">Inchangées</th><th>Plage de pièces</th><th>Débit / Crédit</th></tr>${t}</table>
+    ${nf ? `<p>Prochain numéro de pièce libre — ${nf}</p>` : ''}`;
+  renderReview(); renderDownloads(); renderLabels();
+}
+function renderReview() {
+  const f = $('#revFilter').value;
+  const items = [];
+  S.results.list.forEach(res => res.entries.forEach(en => { if ((en.status === 'verify' || en.status === 'bad') && (f === 'all' || f === en.status)) items.push([res, en]); }));
+  const body = items.map(([res, en], k) => `<tr class="s-${en.status}"><td>${esc(res.bank.code)} ${esc(res.month)}</td><td>${dateStr(en.date)}</td><td>${esc(en.origLabel)}</td><td>${esc(en.newLabel)}</td><td>${esc(en.benef)}</td>
+    <td>${esc(en.account)} ${esc(en.accountName)}</td><td class="num">${fmt(en.amount)}</td><td>${esc(en.remark)}</td>
+    <td style="min-width:240px"><input type="text" list="planList" placeholder="Compte…" data-pick="${esc(en.key)}"></td><td><label><input type="checkbox" data-mem="${esc(en.key)}"> Mémoriser</label></td></tr>`).join('');
+  $('#revTbl').innerHTML = `<tr><th>Fichier</th><th>Date</th><th>Libellé d'origine</th><th>Nouveau libellé</th><th>Bénéficiaire</th><th>Compte proposé</th><th class="num">Montant</th><th>Remarque</th><th>Choisir un compte</th><th></th></tr>${body || '<tr><td colspan="10" class="mut">Aucune ligne à afficher.</td></tr>'}`;
+  const entryOf = key => { for (const res of S.results.list) for (const en of res.entries) if (en.key === key) return en; };
+  const apply = inp => {
+    const key = inp.dataset.pick, en = entryOf(key), v = inp.value.trim();
+    const m = v.match(/^(\d{4,})/);
+    if (!m || (S.plan && !S.plan.has(m[1]))) { inp.classList.add('inv'); return; }
+    inp.classList.remove('inv');
+    const name = (S.plan && S.plan.get(m[1])) || '';
+    S.overrides.set(key, {account: m[1], name});
+    const mem = document.querySelector(`[data-mem="${CSS.escape(key)}"]`);
+    if (mem && mem.checked) { CFG.maps.push({name: en.benef || en.origLabel, account: m[1]}); saveCfg(); }
+    run(); // recalcul conservant les choix manuels
+  };
+  $('#revTbl').querySelectorAll('[data-pick]').forEach(inp => inp.onchange = () => apply(inp));
+}
+function renderDownloads() {
+  const R_ = S.results;
+  $('#dlList').innerHTML = R_.list.map((res, i) => `<button class="b sec" data-dl="${i}">⬇ ${esc(fileNameOf(res))}</button>`).join('') + (R_.list.length > 1 ? '<button class="b" id="dlZip">⬇ Tout en .zip</button>' : '<button class="b" id="dlZip">⬇ .zip</button>');
+  $('#dlList').querySelectorAll('[data-dl]').forEach(b => b.onclick = () => dlOne(+b.dataset.dl));
+  $('#dlZip').onclick = dlZip;
+}
+function ruleOf(id) { return CFG.rules.find(r => r.id === id); }
+function renderLabels() {
+  const byBank = {};
+  S.results.list.forEach(res => res.entries.forEach(en => {
+    if (en.p.cp && en.p.cp.acc !== '44970000') return;
+    const b = byBank[res.bank.code] = byBank[res.bank.code] || new Map();
+    const k = en.origLabel;
+    const o = b.get(k) || {n: 0, rule: en.ruleId, newLabel: en.newLabel, unknown: en.unknown};
+    o.n++; b.set(k, o);
+  }));
+  $('#lblList').innerHTML = Object.entries(byBank).map(([bank, m]) => `<details ${bank === 'SAHAM' ? 'open' : ''}><summary>${esc(bank)} – ${m.size} libellés distincts</summary>
+    <div class="scroll"><table><tr><th>Libellé</th><th class="num">Nb</th><th>Règle appliquée</th><th>Nouveau libellé</th></tr>${[...m].sort((a, b) => b[1].n - a[1].n).map(([l, o]) => `<tr><td>${esc(l)}</td><td class="num">${o.n}</td><td>${o.unknown ? '<span class="tag err">aucune</span>' : esc((ruleOf(o.rule) || {}).note || (ruleOf(o.rule) || {}).type || '')}</td><td>${esc(o.newLabel)}</td></tr>`).join('')}</table></div></details>`).join('');
+  // libellés sans règle
+  const unk = new Map();
+  S.results.list.forEach(res => res.entries.forEach(en => { if (en.unknown && !en.manual) { const o = unk.get(en.origLabel) || {n: 0}; o.n++; unk.set(en.origLabel, o); } }));
+  $('#unkBox').querySelector('summary').textContent = `Libellés sans règle (${unk.size})`;
+  $('#unkList').innerHTML = unk.size ? `<table><tr><th>Libellé</th><th class="num">Nb</th><th>Compte</th><th>Nouveau libellé (facultatif)</th><th></th></tr>${[...unk].map(([l, o], i) => `<tr><td>${esc(l)}</td><td class="num">${o.n}</td>
+    <td><input type="text" list="planList" data-ua="${i}" placeholder="vide = rester en 44970000"></td><td><input type="text" data-ul="${i}"></td><td><button class="b sm" data-uadd="${i}">Créer la règle</button></td></tr>`).join('')}</table>` : '<p class="mut">Aucun.</p>';
+  const labels = [...unk.keys()];
+  $('#unkList').querySelectorAll('[data-uadd]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.uadd, acc = ($(`[data-ua="${i}"]`).value.match(/^(\d{4,})/) || [])[1] || '';
+    const lab = $(`[data-ul="${i}"]`).value.trim();
+    if (!acc && !lab) { alert('Indiquez un compte et/ou un nouveau libellé.'); return; }
+    const rule = R('*', acc ? 'fixed' : 'label', '^' + escRe(norm(labels[i])) + '$', acc, lab || labels[i], false, 'Règle utilisateur');
+    CFG.rules.splice(CFG.rules.length - 1, 0, rule); // avant la dernière règle (2.4)
+    saveCfg(); run();
+  });
+}
+
+/* =====================================================================
+   Rendu – vue Règles
+   ===================================================================== */
+function renderRules() {
+  const bankOpts = sel => ['*', ...CFG.banks.map(b => b.code)].map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  const types = ['chq', 'eff', 'vir', 'fixed', 'label', 'keep'];
+  $('#rulesTbl').innerHTML = '<tr><th>Actif</th><th>Banque</th><th>Type</th><th>Motif (regex)</th><th>Compte</th><th>Libellé</th><th>À vérifier</th><th>Note</th><th></th></tr>' + CFG.rules.map((r, i) => `<tr>
+    <td><input type="checkbox" data-r="${i}:active"${r.active ? ' checked' : ''}></td>
+    <td><select data-r="${i}:bank">${bankOpts(r.bank)}</select></td>
+    <td><select data-r="${i}:type">${types.map(t => `<option${t === r.type ? ' selected' : ''}>${t}</option>`).join('')}</select></td>
+    <td class="mono" style="min-width:300px"><input type="text" data-r="${i}:pattern" value="${esc(r.pattern)}"></td>
+    <td style="width:110px"><input type="text" data-r="${i}:account" value="${esc(r.account)}"></td>
+    <td style="min-width:200px"><input type="text" data-r="${i}:label" value="${esc(r.label)}"></td>
+    <td><input type="checkbox" data-r="${i}:verify"${r.verify ? ' checked' : ''}></td>
+    <td><input type="text" data-r="${i}:note" value="${esc(r.note)}"></td>
+    <td style="white-space:nowrap"><button class="b sec sm" data-rm="${i}:-1">↑</button> <button class="b sec sm" data-rm="${i}:1">↓</button> <button class="b red sm" data-rdel="${i}">✕</button></td></tr>`).join('');
+  $('#rulesTbl').querySelectorAll('[data-r]').forEach(el => el.onchange = () => {
+    const [i, k] = el.dataset.r.split(':'); const v = el.type === 'checkbox' ? el.checked : el.value;
+    CFG.rules[+i][k] = typeof v === 'string' ? (k === 'label' ? v : v.trim()) : v;
+    if (k === 'pattern') { try { new RegExp(v); el.classList.remove('inv'); } catch (e) { el.classList.add('inv'); } }
+    saveCfg(); S.results = null; renderResults();
+  });
+  $('#rulesTbl').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
+    const [i, d] = b.dataset.rm.split(':').map(Number), j = i + d;
+    if (j < 0 || j >= CFG.rules.length) return;
+    [CFG.rules[i], CFG.rules[j]] = [CFG.rules[j], CFG.rules[i]]; saveCfg(); S.results = null; renderResults(); renderRules();
+  });
+  $('#rulesTbl').querySelectorAll('[data-rdel]').forEach(b => b.onclick = () => { CFG.rules.splice(+b.dataset.rdel, 1); saveCfg(); S.results = null; renderResults(); renderRules(); });
+  $('#mapTbl').innerHTML = '<tr><th>Nom (bénéficiaire ou libellé)</th><th>Compte</th><th>Intitulé du plan</th><th></th></tr>' + CFG.maps.map((m, i) => `<tr>
+    <td><input type="text" data-m="${i}:name" value="${esc(m.name)}"></td><td style="width:140px"><input type="text" data-m="${i}:account" value="${esc(m.account)}"></td>
+    <td class="mut">${esc(S.plan ? (S.plan.get(m.account) || '(compte absent du plan)') : '')}</td><td><button class="b red sm" data-mdel="${i}">✕</button></td></tr>`).join('');
+  $('#mapTbl').querySelectorAll('[data-m]').forEach(el => el.onchange = () => { const [i, k] = el.dataset.m.split(':'); CFG.maps[+i][k] = el.value.trim(); saveCfg(); S.results = null; renderResults(); });
+  $('#mapTbl').querySelectorAll('[data-mdel]').forEach(b => b.onclick = () => { CFG.maps.splice(+b.dataset.mdel, 1); saveCfg(); S.results = null; renderResults(); renderRules(); });
+}
+
+/* =====================================================================
+   Événements
+   ===================================================================== */
+const drop = $('#drop'), inp = $('#fileInput');
+drop.onclick = () => inp.click();
+inp.onchange = () => { addFiles([...inp.files]); inp.value = ''; };
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
+$('#runBtn').onclick = () => { S.overrides = new Map(); run(); };
+$('#revFilter').onchange = () => S.results && renderReview();
+$('#addBank').onclick = () => { CFG.banks.push({code: 'NEW', name: '', journal: '', account: '', chq: '', eff: '', start: ''}); saveCfg(); renderBanks(); };
+$('#addRule').onclick = () => { CFG.rules.splice(CFG.rules.length - 1, 0, R('*', 'fixed', '', '', '', false, '')); saveCfg(); renderRules(); };
+$('#addMap').onclick = () => { CFG.maps.push({name: '', account: ''}); saveCfg(); renderRules(); };
+$('#nav-main').onclick = () => { $('#view-main').classList.remove('hide'); $('#view-rules').classList.add('hide'); $('#nav-main').classList.add('on'); $('#nav-rules').classList.remove('on'); renderBanks(); };
+$('#nav-rules').onclick = () => { $('#view-rules').classList.remove('hide'); $('#view-main').classList.add('hide'); $('#nav-rules').classList.add('on'); $('#nav-main').classList.remove('on'); renderRules(); };
+$('#expJson').onclick = () => saveBlob(JSON.stringify({version: 1, banks: CFG.banks, rules: CFG.rules, maps: CFG.maps}, null, 2), 'lmba_regles.json', 'application/json');
+$('#impJsonBtn').onclick = () => $('#impJson').click();
+$('#impJson').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const j = JSON.parse(await f.text());
+    if (!Array.isArray(j.rules)) throw new Error('champ « rules » manquant');
+    CFG = {banks: Array.isArray(j.banks) ? j.banks : CFG.banks, rules: j.rules.map(r => ({...R('*', 'keep', ''), ...r, id: r.id || uid()})), maps: Array.isArray(j.maps) ? j.maps : CFG.maps};
+    saveCfg(); S.results = null; renderRules(); renderBanks(); renderResults(); alert('Import réussi.');
+  } catch (err) { alert('Import impossible : ' + err.message); }
+  e.target.value = '';
+};
+$('#resetAll').onclick = () => { if (confirm('Rétablir les banques, règles et correspondances par défaut ?')) { CFG = {banks: defaultBanks(), rules: defaultRules(), maps: defaultMaps()}; saveCfg(); S.results = null; renderRules(); renderBanks(); renderResults(); } };
+
+renderBanks(); renderFiles(); renderResults();
+</script>
+</body>
+</html>

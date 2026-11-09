@@ -1,0 +1,4 @@
+LMBA – Réaffectation des exports bancaires
+Ouvrir lmba/index.html dans un navigateur (Chrome, Edge, Firefox). Le dossier lib/ doit rester à côté.
+Tout le traitement se fait dans le navigateur ; règles et correspondances sont mémorisées en localStorage
+(export/import JSON dans l'onglet « Règles »).
