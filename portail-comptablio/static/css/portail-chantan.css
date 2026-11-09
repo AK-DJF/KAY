@@ -1,0 +1,123 @@
+/* Design « Comptablio Portail Expert » repris de l'export Chantan (2026-10-11). */
+html { scroll-behavior: smooth; } body { margin: 0; } .cx *, .cx *::before, .cx *::after { box-sizing: border-box; } .cx section[id], .cx [id^=app-] { scroll-margin-top: 120px; } .cx .burger { cursor: pointer; padding: 0; }
+.cx { --navy: #10204f; --navy-d: #0a1636; --gold: #f2b705; --gold-d: #c98f00; --grey: #71717a; --soft: #eef4ff; --cream: #fbf6e8; color: var(--navy); font-family: 'Manrope', system-ui, sans-serif; background: #fff; }
+.cx a { text-decoration: none; color: inherit; }
+.cx .wrap { width: min(1180px, calc(100% - 48px)); margin: 0 auto; }
+.cx .pill { display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 26px; border-radius: 999px; font-weight: 800; font-size: .88rem; white-space: nowrap; transition: transform .2s, background .2s, color .2s, box-shadow .2s; border: 2px solid var(--navy); }
+.cx .pill:hover { transform: translateY(-2px); }
+.cx .pill-fill { background: var(--navy); color: #fff; }
+.cx .pill-fill:hover { background: var(--gold); border-color: var(--gold); color: var(--navy); }
+.cx .pill-line { background: transparent; color: var(--navy); }
+.cx .pill-line:hover { background: var(--navy); color: #fff; }
+.cx .brand { font-weight: 800; font-size: 1.7rem; letter-spacing: -.06em; color: var(--navy); }
+.cx .brand b { color: var(--gold-d); font-weight: 800; }
+
+.cx .bar { background: var(--navy-d); color: #fff; height: 32px; position: fixed; top: 0; left: 0; right: 0; z-index: 60; }
+.cx .bar .wrap { height: 100%; display: flex; align-items: center; justify-content: space-between; }
+.cx .bar .brand { font-size: .95rem; color: #fff; }
+.cx .bar .brand b { color: var(--gold); }
+.cx .bar nav { display: flex; gap: 20px; overflow-x: auto; scrollbar-width: none; }
+.cx .bar nav a { font-size: .62rem; font-weight: 700; letter-spacing: .05em; opacity: .8; white-space: nowrap; }
+.cx .bar nav a:hover { opacity: 1; color: var(--gold); }
+
+.cx .head { position: fixed; top: 32px; left: 0; right: 0; z-index: 50; height: 78px; background: #fff; border-bottom: 3px solid var(--gold); }
+.cx .head .wrap { height: 100%; display: flex; align-items: center; gap: 28px; }
+.cx .menu { display: flex; align-items: center; gap: clamp(14px, 2vw, 30px); margin-left: auto; }
+.cx .menu > a, .cx .dd > span { font-size: .84rem; font-weight: 800; color: #475569; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 28px 0; }
+.cx .menu > a:hover, .cx .dd:hover > span { color: var(--gold-d); }
+.cx .dd { position: relative; }
+.cx .dd-list { position: absolute; top: 66px; left: -16px; width: 270px; background: #fff; border: 1px solid #e8ecf5; border-radius: 12px; padding: 8px; box-shadow: 0 20px 40px -18px rgba(16,32,79,.3); opacity: 0; visibility: hidden; transform: translateY(6px); transition: all .2s; }
+.cx .dd:hover .dd-list { opacity: 1; visibility: visible; transform: none; }
+.cx .dd-list a { display: flex; align-items: center; gap: 12px; padding: 11px 10px; border-radius: 10px; font-size: .8rem; font-weight: 800; }
+.cx .dd-list a:hover { background: var(--cream); }
+.cx .dot { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--gold); color: var(--navy); font-size: .65rem; font-weight: 800; flex: none; }
+.cx .acts { display: flex; gap: 10px; }
+.cx .acts .pill { height: 42px; font-size: .8rem; padding: 0 20px; }
+.cx .burger { display: none; margin-left: auto; width: 42px; height: 42px; border-radius: 50%; border: 1px solid #dbe3f3; background: #fff; place-items: center; color: var(--navy); }
+.cx .mob { display: none; }
+
+/* Héros centré */
+.cx .hero { padding: 156px 0 0; background: linear-gradient(180deg, var(--cream) 0%, #fff 100%); position: relative; }
+.cx .hero .wrap { display: flex; flex-direction: column; align-items: center; gap: 56px; }
+.cx .hero .wrap > div:first-child { text-align: center; max-width: 820px; display: flex; flex-direction: column; align-items: center; }
+.cx .hero h1 { font-size: clamp(2.7rem, 5.6vw, 4.8rem); line-height: 1.04; letter-spacing: -.05em; font-weight: 800; margin: 0 0 22px; }
+.cx .hero h1 span { color: var(--gold-d); display: block; }
+.cx .lede { color: var(--grey); font-size: 1.08rem; line-height: 1.75; max-width: 680px; margin: 0 0 28px; }
+.cx .checks { list-style: none; padding: 0; margin: 0 0 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 28px; text-align: left; max-width: 780px; }
+.cx .checks li { display: flex; gap: 12px; font-size: .9rem; font-weight: 700; line-height: 1.5; }
+.cx .checks svg { flex: none; width: 22px; height: 22px; padding: 4px; border-radius: 50%; background: #16a34a; color: #fff; margin-top: 1px; }
+.cx .row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.cx .note { margin-top: 22px; color: var(--grey); font-size: .78rem; font-weight: 700; display: flex; gap: 9px; align-items: center; }
+.cx .note i { width: 8px; height: 8px; border-radius: 50%; background: #16a34a; }
+.cx .duo { position: relative; width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 0; background: var(--navy); border-radius: 14px 14px 0 0; padding: 22px 22px 0; overflow: hidden; }
+.cx .ph { position: relative; margin: 0; overflow: hidden; }
+.cx .ph:first-child { border-radius: 12px 0 0 0; }
+.cx .ph:last-child { border-radius: 0 12px 0 0; }
+.cx .ph img { width: 100%; height: 400px; object-fit: cover; object-position: center 25%; display: block; }
+.cx .ph:first-child img { filter: grayscale(.55) contrast(.95); }
+.cx .ph figcaption { position: absolute; left: 16px; top: 16px; background: #fff; color: var(--navy); font-size: .74rem; font-weight: 800; padding: 8px 16px; border-radius: 999px; }
+.cx .ph:last-child figcaption { background: var(--gold); }
+.cx .arrow { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 2; width: 56px; height: 56px; border-radius: 50%; background: var(--gold); color: var(--navy); display: grid; place-items: center; border: 5px solid var(--navy); }
+
+/* Comment ça marche : crème, grands chiffres */
+.cx .how { background: var(--cream); color: var(--navy); padding: 96px 0; }
+.cx .how h2 { font-size: clamp(2rem, 3.6vw, 3rem); margin: 0 0 48px; letter-spacing: -.04em; text-align: center; }
+.cx .steps { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; border-top: 3px solid var(--navy); }
+.cx .steps > div { padding: 30px 30px 10px 0; position: relative; }
+.cx .steps > div + div { padding-left: 30px; border-left: 1px solid rgba(16,32,79,.15); }
+.cx .num { width: 52px; height: 52px; border-radius: 50%; background: var(--gold); color: var(--navy); display: grid; place-items: center; font-weight: 800; font-size: 1.2rem; margin-bottom: 20px; }
+.cx .steps h3 { font-size: 1.25rem; margin: 0 0 8px; }
+.cx .steps p { margin: 0; color: #5b6070; line-height: 1.7; font-size: .95rem; }
+
+.cx .kicker { color: var(--gold-d); font-weight: 800; font-size: .75rem; letter-spacing: .16em; text-transform: uppercase; margin: 0 0 12px; }
+.cx .why { padding: 100px 0; text-align: center; }
+.cx .why h2, .cx .apps h2 { font-size: clamp(2rem, 3.6vw, 3rem); margin: 0 0 50px; letter-spacing: -.04em; }
+.cx .cards { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; text-align: left; }
+.cx .card { background: var(--navy); color: #fff; border-radius: 14px; padding: 36px 30px; transition: transform .25s, box-shadow .25s; }
+.cx .card:hover { transform: translateY(-5px); box-shadow: 0 24px 40px -22px rgba(16,32,79,.7); }
+.cx .card svg { color: var(--gold); margin-bottom: 24px; }
+.cx .card h3 { margin: 0 0 10px; font-size: 1.15rem; color: #fff; }
+.cx .card p { margin: 0; color: rgba(255,255,255,.75); line-height: 1.7; font-size: .92rem; }
+
+/* Applications : grille de cartes */
+.cx .apps { padding: 90px 0 100px; background: var(--soft); }
+.cx .apps .kicker, .cx .apps h2 { text-align: center; }
+.cx .list { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.cx .app { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 30px; background: #fff; border-radius: 14px; border: 1px solid #dbe3f3; border-bottom: 4px solid var(--gold); transition: transform .2s, box-shadow .2s; scroll-margin-top: 130px; }
+.cx .app:hover { transform: translateY(-4px); box-shadow: 0 22px 40px -24px rgba(16,32,79,.5); }
+.cx .app .id { display: flex; align-items: center; gap: 14px; font-weight: 800; letter-spacing: .03em; font-size: 1rem; }
+.cx .app .dot { width: 46px; height: 46px; font-size: .82rem; border-radius: 12px; background: var(--navy); color: var(--gold); }
+.cx .app p { margin: 0; color: var(--grey); font-size: .9rem; line-height: 1.65; flex: 1; }
+.cx .app .pill { height: 42px; font-size: .82rem; padding: 0 22px; }
+
+.cx .foot { background: var(--navy-d); color: rgba(255,255,255,.8); padding: 36px 0; }
+.cx .foot .wrap { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.cx .foot .brand { color: #fff; font-size: 1.4rem; }
+.cx .foot .brand b { color: var(--gold); }
+.cx .foot p { margin: 0; font-size: .8rem; }
+
+@media (max-width: 1000px) {
+  .cx .menu, .cx .acts { display: none; }
+  .cx .burger { display: grid; }
+  .cx .mob { display: flex; flex-direction: column; position: fixed; top: 110px; left: 0; right: 0; z-index: 49; background: #fff; padding: 12px 24px 24px; border-bottom: 1px solid #e8ecf5; }
+  .cx .mob a:not(.pill) { padding: 13px 0; font-weight: 800; border-bottom: 1px solid #eef0f6; }
+  .cx .mob .pill { margin-top: 12px; justify-content: center; }
+  .cx .cards { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .cx .wrap { width: calc(100% - 36px); }
+  .cx .hero { padding: 130px 0 0; }
+  .cx .checks { grid-template-columns: 1fr; }
+  .cx .duo { padding: 12px 12px 0; }
+  .cx .ph img { height: 250px; }
+  .cx .ph figcaption { left: 8px; top: 8px; font-size: .62rem; padding: 6px 10px; }
+  .cx .arrow { width: 44px; height: 44px; }
+  .cx .row .pill { width: 100%; justify-content: center; }
+  .cx .steps { grid-template-columns: 1fr; }
+  .cx .steps > div, .cx .steps > div + div { padding: 24px 0 8px; border-left: 0; }
+  .cx .list { grid-template-columns: 1fr; }
+  .cx .foot .wrap { flex-direction: column; align-items: flex-start; }
+  .cx .how, .cx .why { padding: 64px 0; }
+}
+
+.cx .mob[hidden] { display: none; }

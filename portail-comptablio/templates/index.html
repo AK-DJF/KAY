@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Comptablio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portail.css') }}">
+</head>
+<body>
+{# Version « pro » (2026-10-11) : applications juste sous le titre pour y accéder vite.
+   Versions précédentes : templates/index-avant-pro.html (+ static/css/portail-*.css),
+   templates/index-ancien-2026-10-11.html (+ static/css/style.css). #}
+{% set check %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% endset %}
+{% set fleche %}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>{% endset %}
+<div class="cx" id="top">
+  <div class="bar">
+    <div class="wrap">
+      <a href="#top" aria-label="Retour au portail Comptablio"><span class="brand">Compta<b>blio</b></span></a>
+      <nav>{% for app in applications %}<a href="{{ app.url }}" target="_blank" rel="noopener">{{ app.nom | upper }}</a>{% endfor %}</nav>
+    </div>
+  </div>
+
+  <header class="head">
+    <div class="wrap">
+      <a href="#top" class="logo"><span class="mark">C</span><span class="brand">Compta<b>blio</b></span></a>
+      <nav class="menu" aria-label="Navigation principale">
+        <a href="#applications">Facturation électronique</a>
+        <div class="dd">
+          <span>Logiciels <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+          <div class="dd-list">
+            {% for app in applications %}<a href="{{ app.url }}" target="_blank" rel="noopener"><span class="dot">{{ app.icone }}</span>{{ app.nom | upper }}</a>{% endfor %}
+          </div>
+        </div>
+        <a href="#why">Métiers</a>
+        <a href="#applications">Tarifs</a>
+        <a href="#how">Ressources</a>
+        <a href="#why">Expert-comptable</a>
+      </nav>
+      <div class="acts">
+        <a class="pill pill-line" href="#why">En savoir plus</a>
+        <a class="pill pill-fill" href="#applications">Ouvrir une application</a>
+      </div>
+      <button class="burger" type="button" id="burger" aria-label="Menu" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+    </div>
+  </header>
+  <div class="mob" id="mob" hidden>
+    <a href="#applications">Facturation électronique</a>
+    <a href="#applications">Logiciels</a>
+    <a href="#why">Métiers</a>
+    <a href="#applications">Tarifs</a>
+    <a href="#how">Ressources</a>
+    <a href="#why">Expert-comptable</a>
+    <a class="pill pill-line" href="#why">En savoir plus</a>
+    <a class="pill pill-fill" href="#applications">Ouvrir une application</a>
+  </div>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <div class="hero-text">
+          <p class="note"><i></i> 100 % local — aucune donnée envoyée en dehors de ce poste</p>
+          <h1>Gérez votre entreprise.<span>On s’occupe du reste.</span></h1>
+          <p class="lede">La solution SaaS tout-en-un pour votre comptabilité, votre paie, votre facturation et vos déclarations fiscales — conforme aux normes marocaines.</p>
+          <div class="row">
+            <a class="pill pill-fill pill-lg" href="#applications">Découvrir les applications {{ fleche }}</a>
+            <a class="pill pill-line pill-lg" href="#how">Comment ça marche</a>
+          </div>
+          <ul class="checks">
+            {% for t in ["Gagnez du temps, réduisez les erreurs, gardez le contrôle", "Une plateforme intuitive, automatisée, accessible partout", "Une interface simple, une automatisation qui travaille pour vous", "Un support réactif et qualifié, à votre écoute"] %}
+            <li>{{ check }}{{ t }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="duo">
+          <figure class="ph ph-sans">
+            <img src="{{ url_for('static', filename='img/jeune-sans.jpg') }}" alt="Jeune homme débordé à son bureau">
+            <figcaption>Sans Comptablio</figcaption>
+          </figure>
+          <figure class="ph ph-avec">
+            <img src="{{ url_for('static', filename='img/equipe-groupe-avec.jpg') }}" alt="Jeune fille et deux jeunes collègues souriants autour d'un ordinateur portable">
+            <figcaption>Avec Comptablio</figcaption>
+          </figure>
+          <div class="badge"><strong>{{ applications | length }}</strong> applications<br>sur un seul portail</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="applications" class="apps">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Vos outils</p>
+          <h2>Les applications</h2>
+        </div>
+        <div class="list">
+          {% for app in applications %}
+          <a class="app" id="app-{{ app.icone | lower }}" href="{{ app.url }}" target="_blank" rel="noopener">
+            <span class="dot">{{ app.icone }}</span>
+            <span class="app-txt">
+              <span class="id">{{ app.nom | upper }}</span>
+              <span class="desc">{{ app.description }}</span>
+            </span>
+            <span class="pill pill-fill">Ouvrir {{ fleche }}</span>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="how">
+      <div class="wrap">
+        <div class="sec-head"><h2>Comment ça marche</h2></div>
+        <div class="steps">
+          <div><div class="num">1</div><h3>Ouvrez Comptablio</h3><p>Une seule page avec toutes vos applications à portée de clic.</p></div>
+          <div><div class="num">2</div><h3>Choisissez une application</h3><p>Chaque outil s’ouvre dans son propre onglet.</p></div>
+          <div><div class="num">3</div><h3>Naviguez librement</h3><p>Le bandeau Comptablio reste affiché dans chaque application.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="why" class="why">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Pourquoi Comptablio</p>
+          <h2>Pensé pour votre quotidien de cabinet</h2>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.1 12 6"/><path d="m5.1 8-2.9-.8"/><path d="m6 12-1.9 2"/><path d="M7.2 2.2 8 5.1"/><path d="M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z"/></svg>
+            <h3>Un seul réflexe</h3><p>Une seule page pour retrouver toutes vos applications.</p>
+          </div>
+          <div class="card">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+            <h3>Cohérence visuelle</h3><p>Le même bandeau Comptablio dans chaque application.</p>
+          </div>
+          <div class="card">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.170 1.170 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+            <h3>Maîtrise de vos données</h3><p>Tout tourne sur votre poste, aucun service tiers.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap">
+      <span class="brand">Compta<b>blio</b></span>
+      <p>Chaque application conserve pour l’instant son propre identifiant de connexion.</p>
+    </div>
+  </footer>
+</div>
+
+<script>
+  // Menu mobile (bouton « burger ») : ouvre/ferme la liste, et se referme au clic sur un lien.
+  const burger = document.getElementById("burger"), mob = document.getElementById("mob");
+  burger.addEventListener("click", () => { mob.hidden = !mob.hidden; burger.setAttribute("aria-expanded", String(!mob.hidden)); });
+  mob.addEventListener("click", (e) => { if (e.target.closest("a")) { mob.hidden = true; burger.setAttribute("aria-expanded", "false"); } });
+</script>
+</body>
+</html>

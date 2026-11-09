@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Comptablio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="logo" href="#accueil"><span class="logo-a">Compta</span><span class="logo-b">blio</span></a>
+  <div class="nav-links">
+    <a href="#">Facturation électronique</a>
+    <div class="nav-dropdown">
+      <a href="#applications">Logiciels</a>
+      <div class="nav-dropdown-menu">
+        {% for app in applications %}
+        <a href="{{ app.url }}" target="_blank" rel="noopener">{{ app.nom }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    <a href="#">Métiers</a>
+    <a href="#">Tarifs</a>
+    <a href="#">Ressources</a>
+    <a href="#">Expert-comptable</a>
+  </div>
+  <div class="nav-actions">
+    <a class="btn btn-ghost" href="#fonctionnement">En savoir plus</a>
+    <a class="btn btn-primary" href="#applications">Ouvrir une application</a>
+  </div>
+</nav>
+
+<section class="hero" id="accueil">
+  <div class="hero-text">
+    <h1>Gérez votre entreprise. <span class="accent">On s'occupe du reste.</span></h1>
+    <p class="hero-sub">La solution SaaS tout-en-un pour votre comptabilité, votre paie, votre facturation et vos déclarations fiscales — conforme aux normes marocaines.</p>
+    <ul class="checklist">
+      <li>Gagnez du temps, réduisez les erreurs, gardez le contrôle</li>
+      <li>Une plateforme intuitive, automatisée, accessible partout</li>
+      <li>Une interface simple, une automatisation qui travaille pour vous</li>
+      <li>Un support réactif et qualifié, à votre écoute</li>
+    </ul>
+    <div class="cta-row">
+      <a class="btn btn-primary btn-lg" href="#applications">Découvrir les applications</a>
+      <a class="btn btn-outline btn-lg" href="#fonctionnement">Comment ça marche</a>
+    </div>
+    <p class="trust-line">🔒 100&nbsp;% local — aucune donnée envoyée en dehors de ce poste</p>
+  </div>
+
+  <div class="hero-visual">
+    <img class="hero-illustration" src="{{ url_for('static', filename='img/avant-apres.svg') }}" alt="Avant Comptablio : comptable débordé par la paperasse. Avec Comptablio : comptable serein et organisé.">
+  </div>
+</section>
+
+<section class="steps" id="fonctionnement">
+  <h2>Comment ça marche</h2>
+  <div class="steps-row">
+    <div class="step">
+      <span class="step-num">1</span>
+      <h3>Ouvrez Comptablio</h3>
+      <p>Une seule page à garder ouverte, avec toutes vos applications à portée de clic.</p>
+    </div>
+    <div class="step">
+      <span class="step-num">2</span>
+      <h3>Choisissez une application</h3>
+      <p>Chaque outil s'ouvre dans son propre onglet, avec ses propres données.</p>
+    </div>
+    <div class="step">
+      <span class="step-num">3</span>
+      <h3>Naviguez librement</h3>
+      <p>Le bandeau Comptablio reste affiché dans chaque application pour revenir ou passer à une autre en un clic.</p>
+    </div>
+  </div>
+</section>
+
+<section class="values">
+  <span class="values-eyebrow">Pourquoi Comptablio</span>
+  <h2>Pensé pour votre quotidien de cabinet</h2>
+  <div class="values-row">
+    <div class="value-card">
+      <h3>Un seul réflexe</h3>
+      <p>Une seule page à garder ouverte pour retrouver toutes vos applications, au lieu de multiplier les raccourcis et les onglets.</p>
+    </div>
+    <div class="value-card">
+      <h3>Cohérence visuelle</h3>
+      <p>Le même bandeau Comptablio dans chaque application, pour ne jamais se demander où l'on se trouve.</p>
+    </div>
+    <div class="value-card">
+      <h3>Maîtrise de vos données</h3>
+      <p>Tout tourne sur votre poste : vos dossiers clients ne transitent par aucun service tiers.</p>
+    </div>
+  </div>
+</section>
+
+<main class="apps" id="applications">
+  <h2>Les applications</h2>
+  {% for app in applications %}
+  <article class="app-card">
+    <span class="app-card-icon">{{ app.icone }}</span>
+    <div class="app-card-text">
+      <h3>{{ app.nom }}</h3>
+      <p>{{ app.description }}</p>
+    </div>
+    <a class="open-btn" href="{{ app.url }}" target="_blank" rel="noopener">Ouvrir&nbsp;→</a>
+  </article>
+  {% endfor %}
+</main>
+
+<footer class="note">
+  Chaque application conserve pour l'instant son propre identifiant de connexion.
+</footer>
+
+</body>
+</html>
