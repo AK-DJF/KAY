@@ -255,7 +255,13 @@ td.m{font-family:var(--mono);font-size:.85rem}
 
   function sheetOf(t){
     var c=cols[t];
-    return XLSX.utils.aoa_to_sheet([c.h].concat(data[t].map(function(x){return c.r(x)})),{cellDates:true});
+    var aoa=[c.h].concat(data[t].map(function(x){return c.r(x)}));
+    var ws=XLSX.utils.aoa_to_sheet(aoa,{cellDates:true});
+    ws['!cols']=c.h.map(function(_,i){
+      var w=0;aoa.forEach(function(r){var v=r[i];var l=v==null?0:String(v).length;if(l>w)w=l});
+      return {wch:Math.min(Math.max(w+3,12),60)}});
+    ws['!freeze']={xSplit:0,ySplit:1};
+    return ws;
   }
   function download(){
     var wb=XLSX.utils.book_new();

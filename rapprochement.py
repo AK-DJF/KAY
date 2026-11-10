@@ -18,6 +18,14 @@ from openpyxl.styles import Font, PatternFill
 def norm(s):
     return re.sub(r"\s+", "", str(s)).upper()
 
+def suspect(k):
+    m = re.match(r"^R?FAC/(\d+)/(\d+)$", k)
+    if not m: return "Format inhabituel"
+    if m[1] == "5202": return "Année probablement inversée (2025)"
+    if int(m[1]) > 2025: return f"Année {m[1]}, hors de ce fichier"
+    if len(m[2]) > 5: return "Trop de chiffres"
+    return ""
+
 def lire_liste(path):
     if path.lower().endswith((".xlsx", ".xlsm")):
         ws = openpyxl.load_workbook(path, data_only=True).active
@@ -66,12 +74,12 @@ def main():
     style(ws, [22, 14, 40, 15, 20, 14])
 
     ws = out.create_sheet("Absentes")
-    ws.append(["Numéro", "Variante existante dans ventes ?", "Nb dans liste"])
+    ws.append(["Numéro", "Remarque", "Variante existante dans ventes ?", "Nb dans liste"])
     for k in uniques:
         if k not in V:
             alt = k[1:] if k.startswith("R") else "R" + k
-            ws.append([k, alt if alt in V else "non", cnt[k]])
-    style(ws, [24, 32, 14])
+            ws.append([k, suspect(k), alt if alt in V else "non", cnt[k]])
+    style(ws, [24, 42, 32, 14])
 
     ws = out.create_sheet("Doublons")
     ws.append(["Numéro", "Nb dans liste"])
