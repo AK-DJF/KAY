@@ -331,6 +331,14 @@ async function addFiles(list) {
         const ex = parseExport(wb);
         if (ex && ex.rows.length) {
           rec.kind = 'export'; rec.ex = ex; rec.bank = detectBank(ex.rows);
+          if (!rec.bank) {  // banque inconnue : création automatique à partir du journal et du compte 514
+            const l514 = ex.rows.find(r => /^514/.test(r.acc));
+            if (l514 && l514.jrl) {
+              CFG.banks.push({code: l514.jrl.toUpperCase(), name: l514.jrl.toUpperCase(), journal: l514.jrl, account: l514.acc, chq: 'CHQ ' + l514.jrl.toUpperCase(), eff: 'EFFET ' + l514.jrl.toUpperCase(), start: ''});
+              saveCfg(); renderBanks(); rec.bank = CFG.banks[CFG.banks.length - 1].code;
+              rec.msg = 'Banque ajoutée automatiquement (journal ' + l514.jrl + ', compte ' + l514.acc + ')';
+            }
+          }
           const sj = (CFG.sales.journal || '').toUpperCase();
           if (!rec.bank && (ex.rows.some(r => r.jrl.toUpperCase() === sj) || ex.rows.some(r => r.acc === CFG.sales.generic))) rec.mode = 'ventes';
           const m = majorityMonth(ex.rows); rec.month = m.month; rec.multi = m.multi;
@@ -451,7 +459,11 @@ function classify(e, bank, ctx) {
         base.remark = r.verify ? 'Libellé capté par la règle générale – à vérifier' : ''; return base;
       case 'vir': {
         const nom = lastGroup(m).trim();
-        base.newLabel = tpl(r.label, m, {nom}); base.benef = ''; base.status = 'ok'; base.remark = 'Virement (compte 44970000 conservé)'; return base;
+        base.newLabel = tpl(r.label, m, {nom}); base.benef = nom;
+        // le fournisseur payé par virement est identifié par le nom écrit dans le libellé
+        const sp = matchSupplier(ctx, nom);
+        if (sp.account) { base.account = sp.account; base.accountName = sp.name; }
+        base.status = sp.status; base.remark = sp.remark; return base;
       }
       case 'client': {
         const nom = lastGroup(m).replace(/(\s+(REF|MOTIF|N°|NUM)\b.*|\s+\d{5,}|\s+\d{1,2}\/\d{1,2}\/\d{2,4})+$/, '').trim();
@@ -684,7 +696,7 @@ function renderFiles() {
   el.innerHTML = '<table><tr><th>Fichier</th><th>Nature</th><th>Banque</th><th>Mois</th><th>Détail</th><th></th></tr>' + S.files.map(f => {
     const [cls, lab] = kind[f.kind];
     const bankSel = f.kind === 'export' && f.mode === 'ventes' ? '<span class="tag exp">Ventes</span>' : f.kind === 'export' ? `<select data-bank="${f.id}"><option value="">— ?</option>${CFG.banks.map(b => `<option value="${esc(b.code)}"${b.code === f.bank ? ' selected' : ''}>${esc(b.code)}</option>`).join('')}</select>` : '';
-    const det = f.kind === 'export' ? `${f.ex.rows.length} lignes` : esc(f.msg);
+    const det = f.kind === 'export' ? `${f.ex.rows.length} lignes${f.msg ? ' – ' + esc(f.msg) : ''}` : esc(f.msg);
     return `<tr><td>${esc(f.name)}</td><td><span class="tag ${cls}">${lab}</span></td><td>${bankSel}</td><td>${esc(f.mode === 'ventes' ? '' : f.month || '')}</td><td class="mut">${det}</td><td><button class="b red sm" data-rm="${f.id}">Retirer</button></td></tr>`;
   }).join('') + '</table>';
   $('#runBtn').disabled = !S.files.some(f => f.kind === 'export');
