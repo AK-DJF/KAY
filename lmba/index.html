@@ -111,7 +111,7 @@ td.mono input{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
 </section>
 <section class="card">
   <h2>Règles d'imputation <span class="mut small">(appliquées de haut en bas, la première qui correspond l'emporte ; elles ne concernent que les lignes 44970000)</span></h2>
-  <p class="small mut" style="margin-top:0">Types : <b>chq</b>/<b>eff</b> = règlement fournisseur via l'état (le dernier groupe numérique du motif est le n°) ; <b>vir</b> = « Virement {nom} » (dernier groupe = nom) ; <b>fixed</b> = compte + libellé fixes ; <b>label</b> = seul le libellé change ; <b>keep</b> = ne rien modifier. Libellé : <code>{benef}</code> <code>{n}</code> <code>{nom}</code> <code>$1</code>…<code>$9</code> (groupes du motif). Motifs : expressions régulières insensibles à la casse, testées sur le libellé en majuscules sans accents.</p>
+  <p class="small mut" style="margin-top:0">Types : <b>chq</b>/<b>eff</b> = règlement fournisseur via l'état (le dernier groupe numérique du motif est le n°) ; <b>vir</b> = « Virement {nom} » (dernier groupe = nom) ; <b>client</b> = encaissement : compte client trouvé par le nom (dernier groupe) ; <b>fixed</b> = compte + libellé fixes ; <b>label</b> = seul le libellé change ; <b>keep</b> = ne rien modifier. Libellé : <code>{benef}</code> <code>{n}</code> <code>{nom}</code> <code>$1</code>…<code>$9</code> (groupes du motif). Motifs : expressions régulières insensibles à la casse, testées sur le libellé en majuscules sans accents.</p>
   <div class="scroll" style="max-height:640px"><table id="rulesTbl"></table></div>
   <div class="row" style="margin-top:8px"><button class="b sec sm" id="addRule">+ Ajouter une règle</button></div>
 </section>
@@ -207,6 +207,7 @@ function defaultRules() {
     R('*', 'keep', '^PRELEVEMENT EN FAV\\.?\\s*CNSS', '', '', false, '2.3 CNSS : libellé inchangé'),
     R('*', 'label', '^PRELEVEMENT EN FAV\\.?\\s*(.+)$', '', '$1', false, '2.3 Prélèvement en faveur de X'),
     R('*', 'label', '^PRELEVEMENT A005 ECH', '', 'PRELEVEMENT A005 ECH', false, '2.3 Prélèvement A005'),
+    R('*', 'client', '^(?:VIR[A-Z. ]*RECU DE|VIREMENT RECU DE)\\s+(?![#\\d])(.+)$', '', '', false, '2.4 Encaissement client : compte client propre à la société'),
     R('*', 'keep', '^(VIR[A-Z. ]*RECU DE|VIREMENT RECU DE|ENCAISSEMENT DE|REMISE CHEQUE|REGLEMENT REMISE|REJET VIREMENT|CERTIFICATION CHEQUE)', '', '', false, '2.4 Encaissements, rejets : ne pas modifier')
   ];
 }
@@ -223,6 +224,10 @@ function loadCfg() {
   try { c = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
   CFG = (c && c.banks && c.rules && c.maps) ? c : {banks: defaultBanks(), rules: defaultRules(), maps: defaultMaps()};
   if (!CFG.sales) CFG.sales = defaultSales();
+  if (!CFG.rules.some(r => r.type === 'client')) {  // migration : règle des encaissements clients
+    const i = CFG.rules.findIndex(r => (r.note || '').startsWith('2.4'));
+    CFG.rules.splice(i < 0 ? CFG.rules.length : i, 0, defaultRules().find(r => r.type === 'client'));
+  }
 }
 function saveCfg() { try { localStorage.setItem(LS_KEY, JSON.stringify(CFG)); } catch (e) {} }
 loadCfg();
@@ -393,7 +398,7 @@ function makeCtx(etats) {
   const re = new Map(), bad = [];
   for (const r of CFG.rules) { try { re.set(r.id, new RegExp(r.pattern, 'i')); } catch (e) { bad.push(r.pattern); } }
   const sup = S.plan ? [...S.plan].filter(([a]) => a.startsWith('4411')).map(([a, n]) => ({acc: a, name: n, n: normName(n)})) : [];
-  const cli = S.plan ? [...S.plan].filter(([a]) => a.startsWith(CFG.sales.prefix) && a !== CFG.sales.generic).map(([a, n]) => ({acc: a, name: n, n: normName(n)})) : [];
+  const cli = S.plan ? [...S.plan].filter(([a]) => a.startsWith(CFG.sales.prefix) && a !== CFG.sales.generic && a !== CFG.sales.prefix.padEnd(8, '0')).map(([a, n]) => ({acc: a, name: n, n: normName(n)})) : [];
   return {re, bad, etats, sup, supCache: new Map(), cli, cliCache: new Map()};
 }
 function findEtat(ctx, bank, kind, n, amount) {
@@ -447,6 +452,13 @@ function classify(e, bank, ctx) {
       case 'vir': {
         const nom = lastGroup(m).trim();
         base.newLabel = tpl(r.label, m, {nom}); base.benef = ''; base.status = 'ok'; base.remark = 'Virement (compte 44970000 conservé)'; return base;
+      }
+      case 'client': {
+        const nom = lastGroup(m).replace(/(\s+(REF|MOTIF|N°|NUM)\b.*|\s+\d{5,}|\s+\d{1,2}\/\d{1,2}\/\d{2,4})+$/, '').trim();
+        base.benef = nom;
+        const sp = matchSupplier(ctx, nom, ctx.cli, ctx.cliCache, 'Client');
+        if (sp.account) { base.account = sp.account; base.accountName = sp.name; }
+        base.newLabel = r.label ? tpl(r.label, m, {nom}) : raw; base.status = sp.status; base.remark = sp.remark; return base;
       }
       case 'chq': case 'eff': {
         const n = lastNumericGroup(m).replace(/^0+/, '');
@@ -769,7 +781,7 @@ function renderLabels() {
    ===================================================================== */
 function renderRules() {
   const bankOpts = sel => ['*', ...CFG.banks.map(b => b.code)].map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
-  const types = ['chq', 'eff', 'vir', 'fixed', 'label', 'keep'];
+  const types = ['chq', 'eff', 'vir', 'client', 'fixed', 'label', 'keep'];
   $('#rulesTbl').innerHTML = '<tr><th>Actif</th><th>Banque</th><th>Type</th><th>Motif (regex)</th><th>Compte</th><th>Libellé</th><th>À vérifier</th><th>Note</th><th></th></tr>' + CFG.rules.map((r, i) => `<tr>
     <td><input type="checkbox" data-r="${i}:active"${r.active ? ' checked' : ''}></td>
     <td><select data-r="${i}:bank">${bankOpts(r.bank)}</select></td>
