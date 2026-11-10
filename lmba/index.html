@@ -68,6 +68,9 @@ td.mono input{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
   <p class="mut small" style="margin-top:0">Table éditable. Laissez le « N° de pièce de départ » vide pour conserver les numéros de pièce d'origine.</p>
   <div id="banksTbl"></div>
   <div class="row" style="margin-top:8px"><button class="b sec sm" id="addBank">+ Ajouter une banque</button></div>
+  <h3 style="font-size:14px;margin:16px 0 6px">Journal des ventes (compte client propre à chaque société)</h3>
+  <p class="mut small" style="margin:0 0 6px">Dans un export de ventes, la ligne portant le compte client générique est remplacée par le compte propre au client, retrouvé par son nom dans le plan comptable.</p>
+  <div class="row" id="salesCfg"></div>
 </section>
 
 <section class="card">
@@ -131,7 +134,7 @@ td.mono input{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
-const normName = s => norm(s).split(/[^A-Z0-9]+/).filter(t => t && !['STE','SARL','SA','SOCIETE'].includes(t)).join('');
+const normName = s => norm(s).replace(/\bS\.\s?A\.\s?R\.\s?L\.?(\s?A\.?U\.?)?/g, ' ').split(/[^A-Z0-9]+/).filter(t => t && !['STE','SARL','SARLAU','SA','SOCIETE'].includes(t)).join('');
 const r2 = x => Math.round(x * 100) / 100;
 const fmt = x => r2(x).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 function num(v) {
@@ -213,11 +216,13 @@ function defaultMaps() {
     .map(n => ({name: n, account: L}))
     .concat([{name: "RSB PARTNER'S", account: '44110862'}, {name: 'TUBE ET PROFIL', account: '44110214'}]);
 }
+function defaultSales() { return {journal: 'VT', generic: '34280000', prefix: '3421'}; }
 let CFG;
 function loadCfg() {
   let c = null;
   try { c = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
   CFG = (c && c.banks && c.rules && c.maps) ? c : {banks: defaultBanks(), rules: defaultRules(), maps: defaultMaps()};
+  if (!CFG.sales) CFG.sales = defaultSales();
 }
 function saveCfg() { try { localStorage.setItem(LS_KEY, JSON.stringify(CFG)); } catch (e) {} }
 loadCfg();
@@ -262,15 +267,15 @@ function parseEtat(wb) {
 function parseExport(wb) {
   for (const sn of wb.SheetNames) {
     const rows = sheetRows(wb.Sheets[sn]);
-    const hi = rows.slice(0, 20).findIndex(r => r.some(c => norm(c) === 'JRL') && r.some(c => norm(c).startsWith('DATE')));
+    const hi = rows.slice(0, 20).findIndex(r => r.some(c => ['JRL','JNL'].includes(norm(c))) && r.some(c => norm(c).startsWith('DATE')));
     if (hi < 0) continue;
     const hdrRaw = rows[hi];
     const h = hdrRaw.map(c => norm(c));
     const find = (pred, dflt) => { const i = h.findIndex(pred); return i >= 0 ? i : dflt; };
     const C = {
-      jrl: find(x => x === 'JRL', 0), date: find(x => x.startsWith('DATE'), 1), piece: find(x => x.startsWith('PIECE'), 2),
-      acc: find(x => x.includes('COMPTE'), 3), label: find(x => x.startsWith('NOM'), 4), d: find(x => x.startsWith('DEBIT'), 5),
-      c: find(x => x.startsWith('CREDIT'), 6), fact: find(x => x.includes('FACTURE'), 7)
+      jrl: find(x => x === 'JRL' || x === 'JNL', 0), date: find(x => x.startsWith('DATE'), 1), piece: find(x => x.startsWith('PIECE'), 2),
+      acc: find(x => x.includes('COMPTE'), 3), label: find(x => x.startsWith('NOM') || x.startsWith('INTITULE'), 4), d: find(x => x.startsWith('DEBIT'), 5),
+      c: find(x => x.startsWith('CREDIT'), 6), fact: find(x => x.startsWith('N') && x.includes('FACT'), 7)
     };
     const hdr = [C.jrl, C.date, C.piece, C.acc, C.label, C.d, C.c, C.fact].map((ci, k) => hdrRaw[ci] ?? ['Jrl','Date Fact.','Pièce','N° Compte','Nom client','Débit','Crédit','N° Facture'][k]);
     const out = [];
@@ -279,9 +284,9 @@ function parseExport(wb) {
       const acc = String(r[C.acc] ?? '').trim();
       if (!acc) return;
       out.push({idx: i, jrl: String(r[C.jrl] ?? '').trim(), date: toSerial(r[C.date]), piece: r[C.piece], acc, rawAcc: r[C.acc],
-        label: String(r[C.label] ?? ''), d: num(r[C.d]), c: num(r[C.c]), rawD: r[C.d], rawC: r[C.c], fact: r[C.fact]});
+        label: String(r[C.label] ?? ''), raw: r, d: num(r[C.d]), c: num(r[C.c]), rawD: r[C.d], rawC: r[C.c], fact: r[C.fact]});
     });
-    return {rows: out, hdr, sheet: sn};
+    return {rows: out, hdr, hdrRaw, C, sheet: sn};
   }
   return null;
 }
@@ -321,6 +326,8 @@ async function addFiles(list) {
         const ex = parseExport(wb);
         if (ex && ex.rows.length) {
           rec.kind = 'export'; rec.ex = ex; rec.bank = detectBank(ex.rows);
+          const sj = (CFG.sales.journal || '').toUpperCase();
+          if (!rec.bank && (ex.rows.some(r => r.jrl.toUpperCase() === sj) || ex.rows.some(r => r.acc === CFG.sales.generic))) rec.mode = 'ventes';
           const m = majorityMonth(ex.rows); rec.month = m.month; rec.multi = m.multi;
           rec.minDate = Math.min(...ex.rows.map(r => r.date ?? 1e9));
         } else {
@@ -386,7 +393,8 @@ function makeCtx(etats) {
   const re = new Map(), bad = [];
   for (const r of CFG.rules) { try { re.set(r.id, new RegExp(r.pattern, 'i')); } catch (e) { bad.push(r.pattern); } }
   const sup = S.plan ? [...S.plan].filter(([a]) => a.startsWith('4411')).map(([a, n]) => ({acc: a, name: n, n: normName(n)})) : [];
-  return {re, bad, etats, sup, supCache: new Map()};
+  const cli = S.plan ? [...S.plan].filter(([a]) => a.startsWith(CFG.sales.prefix) && a !== CFG.sales.generic).map(([a, n]) => ({acc: a, name: n, n: normName(n)})) : [];
+  return {re, bad, etats, sup, supCache: new Map(), cli, cliCache: new Map()};
 }
 function findEtat(ctx, bank, kind, n, amount) {
   const wanted = sheetKey(kind === 'chq' ? bank.chq : bank.eff);
@@ -396,8 +404,8 @@ function findEtat(ctx, bank, kind, n, amount) {
   for (const k of Object.keys(ctx.etats)) { const rr = ctx.etats[k].map.get(n); if (rr) return {rec: pick(rr), other: ctx.etats[k].name}; }
   return null;
 }
-function matchSupplier(ctx, benef) {
-  if (ctx.supCache.has(benef)) return ctx.supCache.get(benef);
+function matchSupplier(ctx, benef, list = ctx.sup, cache = ctx.supCache, what = 'Fournisseur') {
+  if (cache.has(benef)) return cache.get(benef);
   const nb = normName(benef);
   let res;
   const mp = CFG.maps.find(m => normName(m.name) === nb && nb);
@@ -406,16 +414,16 @@ function matchSupplier(ctx, benef) {
   else if (!nb) res = {status: 'bad', account: '', name: '', remark: 'Bénéficiaire vide'};
   else {
     let best = null, bs = -1, inc = null, incS = -1;
-    for (const s of ctx.sup) {
+    for (const s of list) {
       const v = sim(nb, s.n);
       if (v > bs) { bs = v; best = s; }
       if (s.n && Math.min(s.n.length, nb.length) >= 5 && (s.n.includes(nb) || nb.includes(s.n)) && v > incS) { incS = v; inc = s; }
     }
     if (best && bs >= 0.9) res = {status: 'ok', account: best.acc, name: best.name, remark: bs < 1 ? `Rapproché de « ${best.name} » (similarité ${bs.toFixed(2)})` : ''};
     else if (inc) res = {status: 'verify', account: inc.acc, name: inc.name, remark: `Nom inclus dans « ${inc.name} » – à vérifier`};
-    else res = {status: 'bad', account: '', name: '', remark: 'Fournisseur absent du plan – compte à créer' + (best ? ` (plus proche : « ${best.name} »)` : '')};
+    else res = {status: 'bad', account: '', name: '', remark: what + ' absent du plan – compte à créer' + (best ? ` (plus proche : « ${best.name} »)` : '')};
   }
-  ctx.supCache.set(benef, res);
+  cache.set(benef, res);
   return res;
 }
 function classify(e, bank, ctx) {
@@ -463,6 +471,31 @@ function classify(e, bank, ctx) {
   base.status = 'bad'; base.unknown = true; base.remark = 'Libellé sans règle'; return base;
 }
 
+function classifySales(r, ctx) {
+  const base = {newLabel: r.label, account: r.acc, accountName: S.plan ? (S.plan.get(r.acc) || '') : '', benef: r.label, remark: '', status: 'none', ruleId: null, unknown: false};
+  if (r.acc !== CFG.sales.generic) return base;
+  const sp = matchSupplier(ctx, r.label, ctx.cli, ctx.cliCache, 'Client');
+  if (sp.account) { base.account = sp.account; base.accountName = sp.name; }
+  base.status = sp.status; base.remark = sp.remark;
+  return base;
+}
+function runSales(f, ctx, warns) {
+  const res = {file: f, bank: {code: 'VENTES'}, sales: true, month: '', entries: [], stats: {total: 0, ok: 0, verify: 0, bad: 0, none: 0}, rangeLabel: '—', totalD: 0, totalC: 0};
+  const byPiece = new Map();
+  for (const r of f.ex.rows) {
+    res.totalD += r.d; res.totalC += r.c;
+    const k = r.piece + '|' + r.date, b = byPiece.get(k) || {d: 0, c: 0, r}; b.d += r.d; b.c += r.c; byPiece.set(k, b);
+    if (r.acc !== CFG.sales.generic && !r.acc.startsWith(CFG.sales.prefix)) continue;
+    const en = Object.assign({key: f.id + ':' + r.idx, fileId: f.id, row: r, date: r.date, origLabel: r.label, amount: r2(Math.max(r.d, r.c)), bankCode: 'VENTES'}, classifySales(r, ctx));
+    const ov = S.overrides.get(en.key);
+    if (ov) { en.account = ov.account; en.accountName = ov.name; en.status = 'ok'; en.remark = (en.remark ? en.remark + ' · ' : '') + 'Choix manuel'; en.manual = true; }
+    res.entries.push(en); res.stats.total++; res.stats[en.status]++;
+  }
+  for (const b of byPiece.values()) if (Math.abs(b.d - b.c) > 0.005) warns.push(`« ${f.name} » : pièce ${b.r.piece} déséquilibrée (débit ${fmt(b.d)} / crédit ${fmt(b.c)})`);
+  if (Math.abs(res.totalD - res.totalC) > 0.005) warns.push(`« ${f.name} » : total débit ${fmt(res.totalD)} ≠ total crédit ${fmt(res.totalC)}`);
+  return res;
+}
+
 /* =====================================================================
    Traitement
    ===================================================================== */
@@ -478,7 +511,7 @@ function run() {
   }
   const ctx = makeCtx(etats);
   if (ctx.bad.length) warns.push('Motifs invalides ignorés : ' + ctx.bad.join(' ; '));
-  if (!S.files.some(f => f.kind === 'etat')) warns.push("Aucun état des chèques et effets chargé : les règlements par chèque/effet resteront non affectés.");
+  if (exports.some(f => f.mode !== 'ventes') && !S.files.some(f => f.kind === 'etat')) warns.push("Aucun état des chèques et effets chargé : les règlements par chèque/effet resteront non affectés.");
   if (!S.plan) warns.push("Aucun plan comptable chargé : les fournisseurs ne pourront pas être affectés.");
 
   const order = exports.slice().sort((a, b) => (a.minDate - b.minDate) || a.name.localeCompare(b.name));
@@ -486,6 +519,7 @@ function run() {
   for (const b of CFG.banks) { const n = parseInt(b.start, 10); counters[b.code] = isNaN(n) ? null : n; }
   const results = [];
   for (const f of order) {
+    if (f.mode === 'ventes') continue;
     const bank = CFG.banks.find(b => b.code === f.bank);
     if (!bank) { warns.push(`« ${f.name} » : banque non détectée – choisissez-la dans la liste.`); continue; }
     const entries = pairRows(f.ex.rows).map((p, i) => ({p, key: f.id + ':' + p.first, fileId: f.id}));
@@ -523,9 +557,10 @@ function run() {
     if (f.multi) warns.push(`« ${f.name} » : le fichier couvre plusieurs mois (mois retenu : ${f.month}).`);
     results.push(res);
   }
+  for (const f of order) if (f.mode === 'ventes') results.push(runSales(f, ctx, warns));
   // doublons entre fichiers
   const seen = new Map();
-  for (const res of results) for (const en of res.entries) {
+  for (const res of results.filter(r => !r.sales)) for (const en of res.entries) {
     const k = [en.bankCode, en.date, norm(en.origLabel), en.amount].join('|');
     if (seen.has(k) && seen.get(k) !== res.file.id) {
       const other = seen.get(k);
@@ -543,7 +578,7 @@ function run() {
    ===================================================================== */
 const FILL = {ok: 'C6EFCE', verify: 'FFEB9C', bad: 'F8CBAD'};
 const stl = st => FILL[st] ? {fill: {patternType: 'solid', fgColor: {rgb: FILL[st]}}} : undefined;
-function fileNameOf(res) { return `Export_${res.bank.code}_${res.month || 'XX-XXXX'}_reaffecte.xlsx`; }
+function fileNameOf(res) { if (res.sales) return res.file.name.replace(/\.[^.]+$/, '') + '_reaffecte.xlsx'; return `Export_${res.bank.code}_${res.month || 'XX-XXXX'}_reaffecte.xlsx`; }
 async function buildXlsx(res) {
   const wb = XLSX.utils.book_new();
   const H = {font: {bold: true}, fill: {patternType: 'solid', fgColor: {rgb: 'D9E1F2'}}, border: {bottom: {style: 'thin', color: {rgb: '808080'}}}};
@@ -555,6 +590,20 @@ async function buildXlsx(res) {
     if (o.z) cell.z = o.z; if (o.s) cell.s = JSON.parse(JSON.stringify(o.s)); // copie : la bibliothèque modifie l'objet de style
     ws[XLSX.utils.encode_cell({r, c})] = cell;
   };
+  if (res.sales) {
+    const ex = res.file.ex, C = ex.C, byIdx = new Map(res.entries.map(e => [e.row.idx, e]));
+    ex.hdrRaw.forEach((h, c) => put(ws, 0, c, String(h ?? ''), {s: H}));
+    ex.rows.forEach((row, i) => {
+      const en = byIdx.get(row.idx), s = en ? stl(en.status) : undefined;
+      ex.hdrRaw.forEach((_, c) => {
+        let v = row.raw[c];
+        if (c === C.acc && en) v = (typeof row.rawAcc === 'number' && /^\d+$/.test(en.account)) ? Number(en.account) : en.account;
+        put(ws, i + 1, c, v, {s, z: c === C.date ? 'dd/mm/yyyy' : (c === C.d || c === C.c) ? '#,##0.00' : undefined});
+      });
+    });
+    ws['!ref'] = XLSX.utils.encode_range({s: {r: 0, c: 0}, e: {r: ex.rows.length, c: ex.hdrRaw.length - 1}});
+    ws['!cols'] = ex.hdrRaw.map((_, c) => ({wch: c === C.label ? 44 : 14}));
+  } else {
   res.file.ex.hdr.forEach((h, c) => put(ws, 0, c, String(h), {s: H}));
   r = 1;
   const accVal = (acc, raw) => (typeof raw === 'number' && /^\d+$/.test(acc)) ? Number(acc) : acc;
@@ -575,6 +624,7 @@ async function buildXlsx(res) {
   }
   ws['!ref'] = XLSX.utils.encode_range({s: {r: 0, c: 0}, e: {r: Math.max(r - 1, 0), c: 7}});
   ws['!cols'] = [{wch: 7}, {wch: 12}, {wch: 8}, {wch: 12}, {wch: 52}, {wch: 14}, {wch: 14}, {wch: 14}];
+  }
   XLSX.utils.book_append_sheet(wb, ws, 'Feuil1');
   // --- Contrôle
   const wc = {}; const hd = ['Date', "Libellé d'origine", 'Nouveau libellé', 'Bénéficiaire (état)', 'Compte affecté', 'Intitulé plan', 'Montant', 'Remarque'];
@@ -621,15 +671,21 @@ function renderFiles() {
   const kind = {export: ['exp', 'Export bancaire'], etat: ['etat', 'État chèques/effets'], plan: ['plan', 'Plan comptable'], inconnu: ['err', 'Non reconnu']};
   el.innerHTML = '<table><tr><th>Fichier</th><th>Nature</th><th>Banque</th><th>Mois</th><th>Détail</th><th></th></tr>' + S.files.map(f => {
     const [cls, lab] = kind[f.kind];
-    const bankSel = f.kind === 'export' ? `<select data-bank="${f.id}"><option value="">— ?</option>${CFG.banks.map(b => `<option value="${esc(b.code)}"${b.code === f.bank ? ' selected' : ''}>${esc(b.code)}</option>`).join('')}</select>` : '';
+    const bankSel = f.kind === 'export' && f.mode === 'ventes' ? '<span class="tag exp">Ventes</span>' : f.kind === 'export' ? `<select data-bank="${f.id}"><option value="">— ?</option>${CFG.banks.map(b => `<option value="${esc(b.code)}"${b.code === f.bank ? ' selected' : ''}>${esc(b.code)}</option>`).join('')}</select>` : '';
     const det = f.kind === 'export' ? `${f.ex.rows.length} lignes` : esc(f.msg);
-    return `<tr><td>${esc(f.name)}</td><td><span class="tag ${cls}">${lab}</span></td><td>${bankSel}</td><td>${esc(f.month || '')}</td><td class="mut">${det}</td><td><button class="b red sm" data-rm="${f.id}">Retirer</button></td></tr>`;
+    return `<tr><td>${esc(f.name)}</td><td><span class="tag ${cls}">${lab}</span></td><td>${bankSel}</td><td>${esc(f.mode === 'ventes' ? '' : f.month || '')}</td><td class="mut">${det}</td><td><button class="b red sm" data-rm="${f.id}">Retirer</button></td></tr>`;
   }).join('') + '</table>';
   $('#runBtn').disabled = !S.files.some(f => f.kind === 'export');
   el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { S.files = S.files.filter(f => f.id !== b.dataset.rm); S.results = null; refreshPlan(); renderFiles(); renderResults(); });
   el.querySelectorAll('[data-bank]').forEach(s => s.onchange = () => { S.files.find(f => f.id === s.dataset.bank).bank = s.value; S.results = null; renderResults(); });
 }
+function renderSalesCfg() {
+  const f = [['journal', 'Journal'], ['generic', 'Compte client générique'], ['prefix', 'Préfixe des comptes clients']];
+  $('#salesCfg').innerHTML = f.map(([k, l]) => `<label>${l} <input type="text" style="width:110px" data-sales="${k}" value="${esc(CFG.sales[k])}"></label>`).join('');
+  $('#salesCfg').querySelectorAll('[data-sales]').forEach(i => i.onchange = () => { CFG.sales[i.dataset.sales] = i.value.trim(); saveCfg(); S.results = null; renderResults(); });
+}
 function renderBanks() {
+  renderSalesCfg();
   const rows = CFG.banks.map((b, i) => `<tr>${['code','name','journal','account','chq','eff'].map(k => `<td><input type="text" data-bk="${i}:${k}" value="${esc(b[k])}"></td>`).join('')}
     <td><input type="text" data-bk="${i}:start" value="${esc(b.start)}" inputmode="numeric" placeholder="ex. 439"></td><td><button class="b red sm" data-bdel="${i}">✕</button></td></tr>`).join('');
   $('#banksTbl').innerHTML = `<table><tr><th>Code</th><th>Banque</th><th>Journal</th><th>Compte banque</th><th>Onglet chèques</th><th>Onglet effets</th><th>N° de pièce de départ</th><th></th></tr>${rows}</table>`;
@@ -682,7 +738,7 @@ function renderDownloads() {
 function ruleOf(id) { return CFG.rules.find(r => r.id === id); }
 function renderLabels() {
   const byBank = {};
-  S.results.list.forEach(res => res.entries.forEach(en => {
+  S.results.list.forEach(res => res.sales || res.entries.forEach(en => {
     if (en.p.cp && en.p.cp.acc !== '44970000') return;
     const b = byBank[res.bank.code] = byBank[res.bank.code] || new Map();
     const k = en.origLabel;
@@ -759,19 +815,19 @@ $('#addRule').onclick = () => { CFG.rules.splice(CFG.rules.length - 1, 0, R('*',
 $('#addMap').onclick = () => { CFG.maps.push({name: '', account: ''}); saveCfg(); renderRules(); };
 $('#nav-main').onclick = () => { $('#view-main').classList.remove('hide'); $('#view-rules').classList.add('hide'); $('#nav-main').classList.add('on'); $('#nav-rules').classList.remove('on'); renderBanks(); };
 $('#nav-rules').onclick = () => { $('#view-rules').classList.remove('hide'); $('#view-main').classList.add('hide'); $('#nav-rules').classList.add('on'); $('#nav-main').classList.remove('on'); renderRules(); };
-$('#expJson').onclick = () => saveBlob(JSON.stringify({version: 1, banks: CFG.banks, rules: CFG.rules, maps: CFG.maps}, null, 2), 'lmba_regles.json', 'application/json');
+$('#expJson').onclick = () => saveBlob(JSON.stringify({version: 1, banks: CFG.banks, rules: CFG.rules, maps: CFG.maps, sales: CFG.sales}, null, 2), 'lmba_regles.json', 'application/json');
 $('#impJsonBtn').onclick = () => $('#impJson').click();
 $('#impJson').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try {
     const j = JSON.parse(await f.text());
     if (!Array.isArray(j.rules)) throw new Error('champ « rules » manquant');
-    CFG = {banks: Array.isArray(j.banks) ? j.banks : CFG.banks, rules: j.rules.map(r => ({...R('*', 'keep', ''), ...r, id: r.id || uid()})), maps: Array.isArray(j.maps) ? j.maps : CFG.maps};
+    CFG = {banks: Array.isArray(j.banks) ? j.banks : CFG.banks, rules: j.rules.map(r => ({...R('*', 'keep', ''), ...r, id: r.id || uid()})), maps: Array.isArray(j.maps) ? j.maps : CFG.maps, sales: j.sales || CFG.sales};
     saveCfg(); S.results = null; renderRules(); renderBanks(); renderResults(); alert('Import réussi.');
   } catch (err) { alert('Import impossible : ' + err.message); }
   e.target.value = '';
 };
-$('#resetAll').onclick = () => { if (confirm('Rétablir les banques, règles et correspondances par défaut ?')) { CFG = {banks: defaultBanks(), rules: defaultRules(), maps: defaultMaps()}; saveCfg(); S.results = null; renderRules(); renderBanks(); renderResults(); } };
+$('#resetAll').onclick = () => { if (confirm('Rétablir les banques, règles et correspondances par défaut ?')) { CFG = {banks: defaultBanks(), rules: defaultRules(), maps: defaultMaps(), sales: defaultSales()}; saveCfg(); S.results = null; renderRules(); renderBanks(); renderResults(); } };
 
 renderBanks(); renderFiles(); renderResults();
 </script>
