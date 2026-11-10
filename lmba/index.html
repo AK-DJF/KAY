@@ -183,10 +183,15 @@ function defaultBanks() {
   return [
     {code: 'ATW',   name: 'ATTIJARI', journal: 'ATW', account: '51410004', chq: 'CHQ ATW',   eff: 'EFFET ATW',   start: ''},
     {code: 'BMCE',  name: 'BMCE',     journal: 'BQ5', account: '51410002', chq: 'CHQ BMCE',  eff: 'EFFET BMCE',  start: ''},
-    {code: 'SAHAM', name: 'SAHAM',    journal: 'BQ4', account: '51410005', chq: 'CHQ SAHAM', eff: 'EFFET SAHAM', start: ''}
+    {code: 'SAHAM', name: 'SAHAM',    journal: 'BQ4', account: '51410005', chq: 'CHQ SAHAM', eff: 'EFFET SAHAM', start: ''},
+    {code: 'CFG',   name: 'CFG',      journal: 'BQ2', account: '51410000', chq: 'CHQ CFG',   eff: 'EFFET CFG',   start: ''}
   ];
 }
 function defaultRules() {
+  const r = baseRules(), i = r.findIndex(x => x.pattern === 'TIMBRE|TIMFISC');
+  r.splice(i + 1, 0, ...cfgRulesB()); return [...cfgRulesA(), ...r];
+}
+function baseRules() {
   const FR = 'Frais et commissions et services banquaires';
   const NOGEN = '(?!(?:COM|FRAIS|TVA|FACTURATION|SMS|TIMBRE)|.*(?:REMISE|ENCAISS|REJET|CERTIF|RECU))';
   return [
@@ -211,6 +216,32 @@ function defaultRules() {
     R('*', 'keep', '^(VIR[A-Z. ]*RECU DE|VIREMENT RECU DE|ENCAISSEMENT DE|REMISE CHEQUE|REGLEMENT REMISE|REJET VIREMENT|CERTIFICATION CHEQUE)', '', '', false, '2.4 Encaissements, rejets : ne pas modifier')
   ];
 }
+function cfgRulesA() {  // banque CFG : à placer en tête (avant la règle des timbres)
+  return [
+    R('*', 'label', '^PAIEMENT DE FACTURE DGI', '', 'DGI', false, 'CFG Paiement DGI (IR, IS, TVA, timbre…)'),
+    R('*', 'keep', '^PAIEMENT CNSS', '', '', false, 'CFG CNSS : libellé inchangé'),
+    R('*', 'keep', '^(EXTOURNE )?DEPOT (LCN|CHEQUE)', '', '', false, 'CFG Dépôts LCN / chèques : ne pas modifier'),
+    R('*', 'fixed', '^VIREMENT DE MASSE', '44320000', 'rémunérations dues au personnel', false, 'CFG Virement de masse (salaires)'),
+    R('*', 'label', '^PRELEVEMENT AUTOMATIQUE (\\S+?)[-\\u2212]DEBIT', '', '$1', false, 'CFG Prélèvement automatique'),
+    R('*', 'label', '^PRELEVEMENT AUTOMATIQUE (\\S+)', '', '$1', false, 'CFG Prélèvement automatique (sans suffixe)'),
+    R('*', 'vir', '^VIREMENT INTERNATIONAL SWIFT EMIS A\\s+(.+)$', '', 'Virement {nom}', false, 'CFG Virement international émis'),
+    R('*', 'client', '^VIREMENT RECU\\s+(?:\\d+\\s+)*(?!\\d)(.+)$', '', '', false, 'CFG Virement reçu : compte client par le nom')
+  ];
+}
+function cfgRulesB() {  // à placer juste après la règle des timbres
+  return [R('CFG', 'fixed', '^(FRAIS|FORFAIT TPE|LCN PROCESSING FEE)', '61473000', 'Frais et commissions et services banquaires', false, 'CFG Frais et forfait TPE')];
+}
+function migrateCfg() {
+  if (!CFG.rules.some(r => (r.note || '').startsWith('CFG'))) {
+    CFG.rules.unshift(...cfgRulesA());
+    const i = CFG.rules.findIndex(r => r.pattern === 'TIMBRE|TIMFISC');
+    CFG.rules.splice(i < 0 ? CFG.rules.length : i + 1, 0, ...cfgRulesB());
+  }
+  if (!CFG.banks.some(b => b.code === 'CFG')) {
+    const b = CFG.banks.find(b => (b.journal || '').toUpperCase() === 'BQ2');
+    if (b) { b.code = 'CFG'; b.name = 'CFG'; } else CFG.banks.push({code: 'CFG', name: 'CFG', journal: 'BQ2', account: '51410000', chq: 'CHQ CFG', eff: 'EFFET CFG', start: ''});
+  }
+}
 function defaultMaps() {
   const L = '44110011';
   return ['LOYER ATELIER BENSNAH ABDELKADER','LOYER BUREAU SIHAM','MR BENSNAH LOYER','LOYER ATELIER','LOYER BUREAU','SIHAM MESNAN LOYER BUREAU']
@@ -224,10 +255,11 @@ function loadCfg() {
   try { c = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
   CFG = (c && c.banks && c.rules && c.maps) ? c : {banks: defaultBanks(), rules: defaultRules(), maps: defaultMaps()};
   if (!CFG.sales) CFG.sales = defaultSales();
-  if (!CFG.rules.some(r => r.type === 'client')) {  // migration : règle des encaissements clients
+  if (!CFG.rules.some(r => (r.note || '').startsWith('2.4 Encaissement client'))) {  // migration : règle des encaissements clients
     const i = CFG.rules.findIndex(r => (r.note || '').startsWith('2.4'));
-    CFG.rules.splice(i < 0 ? CFG.rules.length : i, 0, defaultRules().find(r => r.type === 'client'));
+    CFG.rules.splice(i < 0 ? CFG.rules.length : i, 0, defaultRules().find(r => (r.note || '').startsWith('2.4 Encaissement client')));
   }
+  migrateCfg();
 }
 function saveCfg() { try { localStorage.setItem(LS_KEY, JSON.stringify(CFG)); } catch (e) {} }
 loadCfg();
@@ -439,11 +471,15 @@ function matchSupplier(ctx, benef, list = ctx.sup, cache = ctx.supCache, what = 
   cache.set(benef, res);
   return res;
 }
+function cleanName(n) {
+  return String(n).replace(/\([^)]*\)?/g, ' ').replace(/^[\s\-−]+/, '').replace(/[\s.…\-−]+$/, '')
+    .replace(/(?:\s+\d+){2,}$|\s+\d{5,}$/, '').replace(/[\s.…\-−]+$/, '').replace(/\s+/g, ' ').trim();
+}
 function classify(e, bank, ctx) {
   const raw = String(e.cp.label ?? '');
   const base = {newLabel: raw, account: e.cp.acc, accountName: S.plan ? (S.plan.get(e.cp.acc) || '') : '', benef: '', remark: '', status: 'none', ruleId: null, unknown: false};
   if (e.cp.acc !== '44970000') return base;
-  const L = norm(raw);
+  const L = norm(raw).replace(/^\d{8,}\s*/, '');  // référence d'opération en tête (ex. CFG)
   const amount = Math.max(e.cp.d, e.cp.c);
   for (const r of CFG.rules) {
     if (!r.active || (r.bank !== '*' && r.bank !== bank.code)) continue;
@@ -458,7 +494,7 @@ function classify(e, bank, ctx) {
         base.accountName = (S.plan && S.plan.get(base.account)) || ''; base.status = r.verify ? 'verify' : 'ok';
         base.remark = r.verify ? 'Libellé capté par la règle générale – à vérifier' : ''; return base;
       case 'vir': {
-        const nom = lastGroup(m).trim();
+        const nom = cleanName(lastGroup(m));
         base.newLabel = tpl(r.label, m, {nom}); base.benef = nom;
         // le fournisseur payé par virement est identifié par le nom écrit dans le libellé
         const sp = matchSupplier(ctx, nom);
@@ -466,7 +502,7 @@ function classify(e, bank, ctx) {
         base.status = sp.status; base.remark = sp.remark; return base;
       }
       case 'client': {
-        const nom = lastGroup(m).replace(/(\s+(REF|MOTIF|N°|NUM)\b.*|\s+\d{5,}|\s+\d{1,2}\/\d{1,2}\/\d{2,4})+$/, '').trim();
+        const nom = cleanName(lastGroup(m).replace(/(\s+(REF|MOTIF|N°|NUM)\b.*|\s+\d{1,2}\/\d{1,2}\/\d{2,4})+$/, ''));
         base.benef = nom;
         const sp = matchSupplier(ctx, nom, ctx.cli, ctx.cliCache, 'Client');
         if (sp.account) { base.account = sp.account; base.accountName = sp.name; }
