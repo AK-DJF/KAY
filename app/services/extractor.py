@@ -520,7 +520,10 @@ def _message_erreur_ia(e: Exception) -> str:
         if code in (400, 404) and "model" in e.response.text.lower():
             return f"modèle « {OPENROUTER_MODEL} » inconnu ou indisponible sur OpenRouter — corrigez OPENROUTER_MODEL dans .env"
         if code == 402:
-            return "crédits OpenRouter épuisés (402) — rechargez le compte sur openrouter.ai"
+            detail = " ".join(e.response.text.split())[:200]
+            return ("crédits insuffisants pour cette clé (402) — rechargez le compte sur openrouter.ai, ou vérifiez "
+                    "que la clé du fichier .env appartient bien au compte rechargé et n'a pas de limite atteinte"
+                    + (f" — réponse OpenRouter : {detail}" if detail else ""))
         if code == 429:
             return ("OpenRouter limite toujours les requêtes (429) après plusieurs tentatives — réessayez dans "
                     "quelques minutes, ou changez de modèle via OPENROUTER_MODEL dans .env")
@@ -688,13 +691,50 @@ def extraire_transactions(
     return _meilleur((transactions, banque), (transactions_ia, "IA (vision)"))
 
 
+def _apercu_cle(cle: str) -> str:
+    """Début et fin de la clé, pour la comparer à la liste du site sans l'afficher en entier."""
+    return f"{cle[:12]}…{cle[-4:]}" if len(cle) > 20 else "(clé trop courte)"
+
+
+def _infos_cle_openrouter() -> str:
+    """Nom, limite et consommation de la clé selon OpenRouter (GET /api/v1/key) — ne consomme
+    aucun crédit. Chaîne vide si l'information n'est pas disponible."""
+    import httpx
+    try:
+        r = httpx.get(
+            "https://openrouter.ai/api/v1/key",
+            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return ""
+        d = r.json().get("data") or {}
+    except Exception:
+        return ""
+    morceaux = []
+    if d.get("label"):
+        morceaux.append(f"nom « {d['label']} »")
+    if d.get("limit") is not None:
+        morceaux.append(f"limite {d['limit']} $")
+    if d.get("limit_remaining") is not None:
+        morceaux.append(f"reste {round(d['limit_remaining'], 4)} $ sur la limite")
+    if d.get("usage") is not None:
+        morceaux.append(f"déjà consommé {round(d['usage'], 4)} $")
+    if d.get("is_free_tier"):
+        morceaux.append("compte sans crédit acheté (free tier)")
+    return ", ".join(morceaux)
+
+
 def tester_cle_ia() -> dict:
     """Petit appel texte à OpenRouter pour vérifier la clé, les crédits et le nom du modèle,
-    sans attendre l'import d'un relevé."""
+    sans attendre l'import d'un relevé. Le message indique aussi quelle clé l'application a
+    chargée et ce qu'OpenRouter en dit, pour repérer une clé d'un autre compte ou limitée."""
     if not OPENROUTER_API_KEY:
         return {"ok": False, "modele": OPENROUTER_MODEL, "message": "aucune clé API OpenRouter dans le fichier .env"}
+    infos = _infos_cle_openrouter()
+    contexte = f" — clé utilisée : {_apercu_cle(OPENROUTER_API_KEY)}" + (f" ({infos})" if infos else "")
     try:
         _demander_ia([{"type": "text", "text": "Réponds uniquement : OK"}], None, "Kikou Numerisation - test cle")
     except Exception as e:
-        return {"ok": False, "modele": OPENROUTER_MODEL, "message": _message_erreur_ia(e)}
-    return {"ok": True, "modele": OPENROUTER_MODEL, "message": "clé API et modèle opérationnels"}
+        return {"ok": False, "modele": OPENROUTER_MODEL, "message": _message_erreur_ia(e) + contexte}
+    return {"ok": True, "modele": OPENROUTER_MODEL, "message": "clé API et modèle opérationnels" + contexte}

@@ -48,7 +48,10 @@ from parsers.base import regrouper_lignes_par_position
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent.parent / ".env")
+    # override=True : la clé du fichier .env l'emporte sur une variable d'environnement Windows
+    # du même nom laissée par une ancienne installation ; utf-8-sig : le Bloc-notes peut
+    # enregistrer le fichier avec un BOM, qui rendrait la première ligne illisible.
+    load_dotenv(Path(__file__).parent.parent / ".env", override=True, encoding="utf-8-sig")
 except ImportError:
     pass
 
