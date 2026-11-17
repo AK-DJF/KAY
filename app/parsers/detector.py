@@ -13,6 +13,7 @@ from .attijariwafa_codes import AttijariwafaCodesParser
 from .bmce import BmceParser
 from .saham import SahamParser
 from .cfg_bank import CfgBankParser
+from .cih import CihParser
 from .generic import GenericParser
 
 # Liste ordonnée des parsers spécifiques (du plus précis au plus générique).
@@ -26,6 +27,7 @@ PARSERS_DISPONIBLES: list[BaseParser] = [
     SocieteGeneraleParser(),
     BREDParser(),
     CreditMutuelParser(),
+    CihParser(),  # avant les parseurs marocains génériques (« DIRHAM » dans l'en-tête)
     AttijariwafaCodesParser(),
     BmceParser(),
     SahamParser(),
