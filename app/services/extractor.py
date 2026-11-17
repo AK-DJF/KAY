@@ -29,17 +29,28 @@ PAGES_MAX_VERIFICATION = 15  # au-delà, la requête de vérification (toutes le
 OPENROUTER_MODEL_SECOURS = os.environ.get("OPENROUTER_MODEL_SECOURS", "google/gemini-2.5-flash").strip()
 
 PROMPT_IA_RELEVE = """Tu es un assistant d'extraction comptable. Cette image est une page d'un \
-relevé bancaire. Extrait TOUTES les lignes de mouvement (transactions) visibles sur cette page \
-sous forme d'un tableau JSON strict — réponds UNIQUEMENT avec un array JSON, sans texte autour \
-ni bloc de code, chaque élément avec exactement ces champs :
+relevé bancaire. Extrait TOUTES les lignes de mouvement (transactions) visibles sur cette page, \
+ainsi que les soldes imprimés en haut et en bas de la page — réponds UNIQUEMENT avec un objet \
+JSON strict, sans texte autour ni bloc de code :
 
 {
-  "date": "YYYY-MM-DD",
-  "libelle": "libellé/description du mouvement",
-  "debit": nombre ou null,
-  "credit": nombre ou null,
-  "solde": nombre ou null
+  "solde_debut_page": nombre ou null,
+  "solde_fin_page": nombre ou null,
+  "mouvements": [
+    {
+      "date": "YYYY-MM-DD",
+      "libelle": "libellé/description du mouvement",
+      "debit": nombre ou null,
+      "credit": nombre ou null,
+      "solde": nombre ou null
+    }
+  ]
 }
+
+"solde_debut_page" = solde imprimé AVANT le premier mouvement de cette page (« ANCIEN SOLDE »,
+« SOLDE DEPART », « SOLDE REPORT », « REPORT »…) ; "solde_fin_page" = solde imprimé APRÈS le dernier
+mouvement de cette page (« SOLDE A REPORTER », « NOUVEAU SOLDE », « SOLDE FINAL »…). Un solde
+débiteur est négatif. Mets null si la page n'en imprime pas — n'en calcule jamais un toi-même.
 
 Règles strictes :
 - Une transaction bancaire a TOUJOURS soit un débit, soit un crédit — JAMAIS les deux à la fois.
@@ -377,13 +388,93 @@ def extraire_transactions_ia(chemin_pdf: str, modele: str | None = None, periode
     images = _images_pdf(chemin_pdf)
     if not images:
         raise RuntimeError(ERREUR_AUCUNE_PAGE)
-    for data_url in images:
+    for numero, data_url in enumerate(images, start=1):
         contenu = _demander_ia(
             [{"type": "text", "text": PROMPT_IA_RELEVE}, {"type": "image_url", "image_url": {"url": data_url}}],
-            modele, "Kikou Numerisation - releves",
+            modele, f"Kikou Numerisation - releves p{numero}",
         )
-        transactions.extend(_transactions_depuis_json(_extraire_json_liste(contenu), nom_fichier, periode))
+        page = _transactions_depuis_json(_extraire_json_liste(contenu), nom_fichier, periode)
+        debut, fin = _soldes_page(contenu)
+        transactions.extend(_verifier_page(data_url, page, debut, fin, modele, nom_fichier, periode, numero))
     return transactions
+
+
+def _soldes_page(contenu: str) -> tuple[float | None, float | None]:
+    """Soldes de début et de fin imprimés sur la page, tels que l'IA les a relevés."""
+    texte = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", (contenu or "").strip())
+    debut, fin = texte.find("{"), texte.rfind("}")
+    if debut == -1 or fin <= debut:
+        return None, None
+    try:
+        donnees = _charger_json_souple(texte[debut:fin + 1])
+    except (json.JSONDecodeError, ValueError):
+        return None, None
+    if not isinstance(donnees, dict):
+        return None, None
+    cles = _cles_normalisees(donnees)
+
+    def _signe(v):
+        if v in (None, "", "null"):
+            return None
+        m = _montant(v)
+        if m is None:
+            return None
+        return -m if str(v).strip().startswith("-") or (isinstance(v, (int, float)) and v < 0) else m
+
+    return (_signe(_premiere_valeur(cles, "soldedebutpage", "soldedebut", "soldeinitial")),
+            _signe(_premiere_valeur(cles, "soldefinpage", "soldefin", "soldefinal")))
+
+
+def _ecart_page(page: list[Transaction], debut: float, fin: float) -> float:
+    return round(debut + sum(t.credit or 0.0 for t in page) - sum(t.debit or 0.0 for t in page) - fin, 2)
+
+
+PROMPT_IA_CORRECTION_PAGE = """Tu as extrait les mouvements ci-dessous de cette page de relevé \
+bancaire. Le contrôle de la page ne tombe pas juste :
+
+  solde début de page {debut:.2f} + crédits {credits:.2f} − débits {debits:.2f} = {calcule:.2f}
+  solde fin de page imprimé : {fin:.2f}
+  écart : {ecart:+.2f} (le calcul est trop {sens})
+
+Au moins une ligne de CETTE page est fausse : mouvement oublié, ligne en double, montant mal lu \
+(chiffre manquant ou en trop, séparateur de milliers), montant dans la mauvaise colonne, ou \
+ligne de solde / report / total prise pour un mouvement. Relis l'image ligne par ligne et renvoie \
+la liste COMPLÈTE et corrigée des mouvements de cette page, au même format JSON strict : un array \
+d'objets {{"date": "YYYY-MM-DD", "libelle": ..., "debit": nombre ou null, "credit": nombre ou \
+null}}, sans texte autour. Ne modifie pas une ligne correcte et n'invente jamais une ligne absente \
+de l'image pour forcer le solde.
+
+Mouvements extraits :
+{lignes}"""
+
+
+def _verifier_page(data_url, page, debut, fin, modele, nom_fichier, periode, numero) -> list[Transaction]:
+    """Contrôle ligne à ligne d'une page : si les soldes imprimés en haut et en bas de la page
+    sont connus et que ses mouvements ne les relient pas, la page seule est relue par l'IA
+    (au plus PASSES_VERIFICATION fois), et une relecture n'est gardée que si elle réduit l'écart."""
+    if debut is None or fin is None or not page:
+        return page
+    for _ in range(PASSES_VERIFICATION):
+        ecart = _ecart_page(page, debut, fin)
+        if abs(ecart) <= 0.01:
+            break
+        texte = PROMPT_IA_CORRECTION_PAGE.format(
+            debut=debut, fin=fin, ecart=ecart, sens="haut" if ecart > 0 else "bas",
+            credits=sum(t.credit or 0.0 for t in page), debits=sum(t.debit or 0.0 for t in page),
+            calcule=round(debut + sum(t.credit or 0.0 for t in page) - sum(t.debit or 0.0 for t in page), 2),
+            lignes=json.dumps([{"date": t.date.isoformat(), "libelle": t.libelle, "debit": t.debit, "credit": t.credit}
+                               for t in page], ensure_ascii=False, indent=0),
+        )
+        try:
+            reponse = _demander_ia([{"type": "text", "text": texte}, {"type": "image_url", "image_url": {"url": data_url}}],
+                                   modele, f"Kikou Numerisation - verification p{numero}")
+        except Exception:
+            break
+        corrige = _transactions_depuis_json(_extraire_json_liste(reponse), nom_fichier, periode)
+        if not corrige or abs(_ecart_page(corrige, debut, fin)) >= abs(ecart):
+            break
+        page = corrige
+    return page
 
 
 PROMPT_IA_CORRECTION = """Tu as extrait les mouvements ci-dessous du relevé bancaire joint (toutes \
