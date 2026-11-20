@@ -637,14 +637,28 @@ def _recaler_annees(transactions: list[Transaction], periode: tuple[int, int] | 
     if not periode:
         return transactions
     annee, mois = periode
+
+    def _plausible(m: int, j: int) -> bool:
+        """Date crédible sur le relevé du mois choisi : ce mois-ci, la toute fin du mois
+        précédent (opérations reportées) ou le tout début du mois suivant (dates de valeur)."""
+        ecart = (m - mois) % 12
+        return ecart == 0 or (ecart == 11 and j >= 25) or (ecart == 1 and j <= 3)
+
     for t in transactions:
+        # Jour et mois inversés par l'IA (« 09/01 » lu comme le 1er septembre, « 12/01 » comme le
+        # 1er décembre sur un relevé de janvier) : on les remet dans l'ordre quand la date lue
+        # n'est pas crédible et que l'inversion, elle, l'est.
+        if not _plausible(t.date.month, t.date.day) and t.date.day <= 12 and _plausible(t.date.day, t.date.month):
+            try:
+                t.date = t.date.replace(month=t.date.day, day=t.date.month)
+            except ValueError:
+                pass
         attendue = annee - 1 if (t.date.month == 12 and mois == 1) else annee + 1 if (t.date.month == 1 and mois == 12) else annee
-        if t.date.year == attendue:
-            continue
-        try:
-            t.date = t.date.replace(year=attendue)
-        except ValueError:  # 29 février
-            t.date = t.date.replace(year=attendue, day=28)
+        if t.date.year != attendue:
+            try:
+                t.date = t.date.replace(year=attendue)
+            except ValueError:  # 29 février
+                t.date = t.date.replace(year=attendue, day=28)
         t.annee, t.mois = t.date.year, t.date.month
     return transactions
 
