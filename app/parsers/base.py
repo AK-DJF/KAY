@@ -100,6 +100,9 @@ def deviner_annee_releve(texte: str) -> int:
     from collections import Counter
     annees = Counter(int(a) for a in _RE_DATE_COMPLETE.findall(texte))
     if annees:
-        return annees.most_common(1)[0][0]
+        # À égalité (ex. relevé de janvier : « SOLDE DEPART AU 31/12/2025 » et « NOUVEAU SOLDE
+        # AU 31/01/2026 »), l'année la plus récente est celle de la période du relevé.
+        maximum = max(annees.values())
+        return max(a for a, n in annees.items() if n == maximum)
     m = _RE_ANNEE_SEULE.search(texte)
     return int(m.group(1)) if m else date.today().year

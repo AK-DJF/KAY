@@ -629,21 +629,22 @@ def _message_erreur_ia(e: Exception) -> str:
 
 
 def _recaler_annees(transactions: list[Transaction], periode: tuple[int, int] | None) -> list[Transaction]:
-    """Les parseurs locaux devinent l'année à partir du premier « 20xx » du texte, qui peut être
-    un numéro de compte ou une référence (ex. 2009) ; l'IA peut aussi se tromper d'année. On
-    recale toute date dont l'année s'écarte de plus d'un an de la période choisie à l'import,
-    en gardant jour et mois (décembre d'un relevé de janvier -> année précédente, et inversement)."""
+    """Donne à chaque mouvement l'année qui correspond au relevé choisi à l'import, en gardant
+    jour et mois : les parseurs locaux devinent l'année d'après le texte (un numéro de compte
+    « 2009 », ou « SOLDE DEPART AU 31/12/2025 » sur un relevé de janvier 2026), et l'IA peut se
+    tromper aussi. Seul cas où l'année diffère : un mouvement de décembre sur un relevé de
+    janvier (année précédente), ou de janvier sur un relevé de décembre (année suivante)."""
     if not periode:
         return transactions
     annee, mois = periode
     for t in transactions:
-        if abs(t.date.year - annee) <= 1:
+        attendue = annee - 1 if (t.date.month == 12 and mois == 1) else annee + 1 if (t.date.month == 1 and mois == 12) else annee
+        if t.date.year == attendue:
             continue
-        nouvelle = annee - 1 if (t.date.month == 12 and mois == 1) else annee + 1 if (t.date.month == 1 and mois == 12) else annee
         try:
-            t.date = t.date.replace(year=nouvelle)
+            t.date = t.date.replace(year=attendue)
         except ValueError:  # 29 février
-            t.date = t.date.replace(year=nouvelle, day=28)
+            t.date = t.date.replace(year=attendue, day=28)
         t.annee, t.mois = t.date.year, t.date.month
     return transactions
 
